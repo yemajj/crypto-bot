@@ -14,15 +14,23 @@ strategy:
     atr_window: 14
 
 risk:
-  max_position_pct: 0.05          # tighter than backtest
-  max_gross_exposure_pct: 0.25
-  max_daily_loss_pct: 0.01        # 1% daily kill-switch in paper
+  max_position_pct: 0.05            # tighter than backtest (5% per position)
+  max_gross_exposure_pct: 0.25      # max 25% of equity in open positions
+  max_daily_loss_pct: 0.01          # stop all entries if daily loss hits 1%
   max_orders_per_minute: 5
   require_stop_loss: true
   symbol_allow_list:
     - BTC/USDT
+  max_open_positions: 1             # single-symbol, single position in v1
+  cooldown_after_losses: 3          # pause new entries after 3 consecutive losses
+  cooldown_bars: 4                  # wait 4 bars (= 4h on 1h timeframe) before re-entering
 
 fees:
-  taker_bps: 10.0
-  maker_bps: 5.0
-  slippage_bps: 5.0
+  taker_bps: 10.0                   # 0.10% — Binance spot taker
+  maker_bps: 5.0                    # 0.05% — Binance spot maker
+  slippage_bps: 5.0                 # 0.05% — conservative estimate for BTC/USDT
+
+# Paper-trading operational settings
+starting_cash: 10000.0              # simulated capital in USDT
+warmup_bars: 200                    # bars to pre-load before live signals begin
+poll_interval_seconds: 60.0         # how often to poll the exchange for new bars

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -62,11 +62,71 @@ class RiskConfig(BaseModel):
     max_orders_per_minute: int = 10
     require_stop_loss: bool = True
     symbol_allow_list: list[str] = Field(default_factory=list)
+    # --- paper-trading safeguards ---
+    max_open_positions: int = 1          # max number of simultaneously held symbols
+    cooldown_after_losses: int = 0       # trigger cooldown after N consecutive losses (0 = off)
+    cooldown_bars: int = 0               # bars to pause entries after cooldown triggers
+
+    @field_validator("max_position_pct", "max_gross_exposure_pct", "max_daily_loss_pct")
+    @classmethod
+    def must_be_positive_fraction(cls, v: float, info: object) -> float:
+        if not (0 < v <= 1):
+            raise ValueError(f"{info.field_name} must be in (0, 1], got {v}")  # type: ignore[union-attr]
+        return v
+
+    @field_validator("max_orders_per_minute")
+    @classmethod
+    def must_be_positive_int(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"max_orders_per_minute must be >= 1, got {v}")
+        return v
+
+    @field_validator("max_open_positions")
+    @classmethod
+    def must_be_positive_positions(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"max_open_positions must be >= 1, got {v}")
+        return v
+
+    @field_validator("cooldown_after_losses", "cooldown_bars")
+    @classmethod
+    def must_be_non_negative_int(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"cooldown fields must be >= 0, got {v}")
+        return v
+
+    @model_validator(mode="after")
+    def cooldown_consistency(self) -> "RiskConfig":
+        if self.cooldown_after_losses > 0 and self.cooldown_bars == 0:
+            raise ValueError(
+                "cooldown_after_losses is set but cooldown_bars is 0 — "
+                "set cooldown_bars to the number of bars to pause after a loss streak"
+            )
+        return self
 
 
 class StrategyConfig(BaseModel):
     name: str = "sma_crossover"
     params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_sma_params(self) -> "StrategyConfig":
+        if self.name == "sma_crossover" and self.params:
+            fast = self.params.get("fast")
+            slow = self.params.get("slow")
+            atr_window = self.params.get("atr_window")
+            risk_pct = self.params.get("risk_per_trade_pct")
+            if fast is not None and (not isinstance(fast, int) or fast < 2):
+                raise ValueError(f"sma_crossover fast must be an int >= 2, got {fast}")
+            if slow is not None and (not isinstance(slow, int) or slow < 2):
+                raise ValueError(f"sma_crossover slow must be an int >= 2, got {slow}")
+            if fast is not None and slow is not None and fast >= slow:
+                raise ValueError(f"sma_crossover fast ({fast}) must be < slow ({slow})")
+            if atr_window is not None and (not isinstance(atr_window, int) or atr_window < 2):
+                raise ValueError(f"sma_crossover atr_window must be an int >= 2, got {atr_window}")
+            if risk_pct is not None and not (0 < risk_pct <= 0.1):
+                raise ValueError(f"sma_crossover risk_per_trade_pct must be in (0, 0.1], got {risk_pct}")
+        return self
 
 
 class MarketConfig(BaseModel):
@@ -79,6 +139,13 @@ class FeesConfig(BaseModel):
     maker_bps: float = 5.0
     slippage_bps: float = 5.0
 
+    @field_validator("taker_bps", "maker_bps", "slippage_bps")
+    @classmethod
+    def must_be_non_negative(cls, v: float, info: object) -> float:
+        if v < 0:
+            raise ValueError(f"{info.field_name} must be >= 0, got {v}")  # type: ignore[union-attr]
+        return v
+
 
 class RunConfig(BaseModel):
     """Shape of a config/*.yaml file."""
@@ -88,6 +155,23 @@ class RunConfig(BaseModel):
     strategy: StrategyConfig = StrategyConfig()
     risk: RiskConfig = RiskConfig()
     fees: FeesConfig = FeesConfig()
+    starting_cash: float = 10_000.0    # initial simulated capital
+    warmup_bars: int = 200             # historical bars to pre-load before live signals
+    poll_interval_seconds: float = 60.0  # feed polling interval (paper mode)
+
+    @field_validator("starting_cash")
+    @classmethod
+    def must_be_positive_cash(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"starting_cash must be > 0, got {v}")
+        return v
+
+    @field_validator("warmup_bars")
+    @classmethod
+    def must_be_positive_warmup(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"warmup_bars must be >= 1, got {v}")
+        return v
 
 
 # --- combined settings -------------------------------------------------------

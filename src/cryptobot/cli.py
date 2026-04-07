@@ -42,10 +42,11 @@ def init_db_cmd() -> None:
 @app.command()
 def backtest(
     config: Path = typer.Option(..., exists=True, help="Path to backtest YAML."),
+    data: Path = typer.Option(..., exists=True, help="Path to OHLCV CSV file."),
 ) -> None:
-    """Run a backtest. (Phase 3 implementation.)"""
-    run_id = run_backtest.main(config)
-    typer.echo(f"backtest run_id={run_id}")
+    """Run a backtest from a local OHLCV CSV file."""
+    run_id = run_backtest.main(config, data)
+    typer.echo(f"backtest complete: run_id={run_id}")
 
 
 @app.command()

@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from cryptobot.core.types import Intent
+from cryptobot.core.types import Intent, Side
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,10 @@ class RiskState:
 
     Kept as a simple dataclass so that tests can construct arbitrary scenarios
     without spinning up a full RiskManager.
+
+    `consecutive_losses` is incremented by the run loop after each losing fill
+    and reset to 0 after `cooldown_bars` bars have elapsed. CooldownAfterLoss
+    reads it; the run loop writes it.
     """
 
     equity: float
@@ -41,6 +45,7 @@ class RiskState:
     daily_pnl: float
     orders_this_minute: int
     open_intents_by_symbol: dict[str, int]
+    consecutive_losses: int = 0
 
 
 class RiskRule(ABC):
@@ -92,6 +97,8 @@ class RequireStopLoss(RiskRule):
     name = "require_stop_loss"
 
     def check(self, intent: Intent, state: RiskState) -> Verdict:
+        if intent.side == Side.SELL:
+            return Verdict.allow()  # closing a position needs no stop
         if intent.stop_price is None:
             return Verdict.deny("stop-loss required but missing")
         return Verdict.allow()
@@ -123,4 +130,55 @@ class KillSwitchFile(RiskRule):
     def check(self, intent: Intent, state: RiskState) -> Verdict:
         if self._path.exists():
             return Verdict.deny(f"kill switch file present: {self._path}")
+        return Verdict.allow()
+
+
+class MaxOpenPositions(RiskRule):
+    """Deny new entries when the number of open positions is at the cap.
+
+    `state.open_intents_by_symbol` must be populated by the run loop as
+    `{symbol: 1}` for every symbol with qty > 0.
+    Exits (SELL) are always allowed regardless of the cap.
+    """
+
+    name = "max_open_positions"
+
+    def __init__(self, max_positions: int) -> None:
+        self._max = max_positions
+
+    def check(self, intent: Intent, state: RiskState) -> Verdict:
+        if intent.side == Side.SELL:
+            return Verdict.allow()
+        n_open = len(state.open_intents_by_symbol)
+        if n_open >= self._max:
+            return Verdict.deny(
+                f"max open positions reached ({n_open} >= {self._max})"
+            )
+        return Verdict.allow()
+
+
+class CooldownAfterLoss(RiskRule):
+    """Deny new entries while a loss streak cooldown is active.
+
+    The run loop increments `state.consecutive_losses` after each losing fill
+    and resets it to 0 after `cooldown_bars` bars have elapsed. This rule only
+    reads the counter — it does NOT manage timing.
+
+    Exits (SELL) are always allowed so that an open position can be closed
+    even during a cooldown period.
+    """
+
+    name = "cooldown_after_loss"
+
+    def __init__(self, consecutive_losses_threshold: int) -> None:
+        self._threshold = consecutive_losses_threshold
+
+    def check(self, intent: Intent, state: RiskState) -> Verdict:
+        if intent.side == Side.SELL:
+            return Verdict.allow()
+        if state.consecutive_losses >= self._threshold:
+            return Verdict.deny(
+                f"cooldown active: {state.consecutive_losses} consecutive losses "
+                f">= threshold {self._threshold}"
+            )
         return Verdict.allow()
