@@ -1,0 +1,36 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# project data
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+*.sqlite
+*.sqlite3
+*.parquet
+
+# editors
+.vscode/
+.idea/
+.DS_Store

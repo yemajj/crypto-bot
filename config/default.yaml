@@ -1,0 +1,31 @@
+# Base run config. Overridden by config/backtest.yaml and config/paper.yaml.
+# Secrets NEVER go here — they live in .env only.
+
+mode: backtest
+
+market:
+  symbols:
+    - BTC/USDT
+  timeframe: 1h
+
+strategy:
+  name: sma_crossover
+  params:
+    fast: 20
+    slow: 50
+    risk_per_trade_pct: 0.005   # 0.5% of equity per trade
+    atr_window: 14
+
+risk:
+  max_position_pct: 0.10        # 10% of equity in any single position
+  max_gross_exposure_pct: 0.50  # 50% of equity across all positions
+  max_daily_loss_pct: 0.02      # kill-switch after -2% in a day
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+
+fees:
+  taker_bps: 10.0   # 0.10%
+  maker_bps: 5.0
+  slippage_bps: 5.0

@@ -1,0 +1,28 @@
+mode: backtest
+
+market:
+  symbols:
+    - BTC/USDT
+  timeframe: 1h
+
+strategy:
+  name: sma_crossover
+  params:
+    fast: 20
+    slow: 50
+    risk_per_trade_pct: 0.005
+    atr_window: 14
+
+risk:
+  max_position_pct: 0.10
+  max_gross_exposure_pct: 0.50
+  max_daily_loss_pct: 0.02
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
