@@ -20,7 +20,13 @@ historical bar series into N folds, runs a fresh backtest on each in-sample wind
 evaluates on the held-out out-of-sample window. If metrics collapse out-of-sample, the
 strategy has no real edge.
 
-**Scope — new files only, zero impact on running bot:**
+**Scope constraints (v1 — keep it narrow):**
+- Single strategy only (no parameter sweeping or optimization)
+- Single symbol only (matches existing backtest engine behavior)
+- No new framework — reuse `BacktestEngine` and `BacktestResult` directly
+- Prefer cached/local historical data (parquet cache or CSV); no live exchange fetching
+
+**New files:**
 
 | File | Purpose |
 |---|---|
@@ -30,7 +36,7 @@ strategy has no real edge.
 **Reuse (do not rewrite):**
 - `src/cryptobot/backtest/engine.py` — existing `BacktestEngine`, bar-loop logic unchanged
 - `src/cryptobot/backtest/metrics.py` — existing `BacktestResult`, returned per fold
-- `src/cryptobot/app/run_backtest.py` — reference for how engine is wired
+- `src/cryptobot/app/run_backtest.py` — reference for how engine is wired today
 
 **Output per fold:**
 ```
@@ -46,6 +52,11 @@ cryptobot walk-forward --config config/backtest.yaml --data path/to/ohlcv.csv --
 
 **Tests to add:** `tests/test_walk_forward.py` — fold slicing correctness, metric aggregation,
 edge cases (too-few bars for requested folds).
+
+**Architecture constraint (from `CLAUDE.md`):**  
+Bar-loop ordering is load-bearing: `settle fills → check stops → mark equity → strategy → risk → submit`.
+Each fold must construct a fresh `BacktestEngine`, `BacktestBroker`, and `RiskManager` — no shared
+state between folds.
 
 ---
 
@@ -72,10 +83,10 @@ import sys, io
 if sys.platform == "win32" and getattr(sys.stdout, "encoding", "utf-8") != "utf-8":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 ```
-- More surgical — keeps the symbols, fixes only the encoding.
+- Keeps the symbols, fixes only the encoding path.
 - Slightly more complex; needs the `TextIOWrapper` approach to work correctly with Typer.
 
-**Verification:** Run `cryptobot report` on Windows without `PYTHONIOENCODING=utf-8`. Should print without crashing.
+**Verification:** Run `cryptobot report` on Windows without `PYTHONIOENCODING=utf-8`. Should not crash.
 
 ---
 
@@ -86,36 +97,56 @@ if sys.platform == "win32" and getattr(sys.stdout, "encoding", "utf-8") != "utf-
 **File:** `src/cryptobot/analytics/queries.py`, `reconstruct_trades()`.
 
 **Issue:** `n_bars_held=0` is hardcoded because the DB schema records fills (not bar entry/exit
-timestamps) and reconstructing bar count from timestamps requires knowing the timeframe, which
-the analytics layer doesn't currently receive. This is not a bug — PnL is correct — but a
-future reader will be confused.
+timestamps) and reconstructing bar count requires knowing the timeframe, which the analytics
+layer doesn't currently receive. Not a bug — PnL is correct — but a future reader will be confused.
 
-**Fix:** Add a comment:
+**Fix:**
 ```python
 n_bars_held=0,  # TODO: derive from fill timestamps + timeframe once timeframe is in journal
 ```
 
 ---
 
-### 4. Phase 8 — AI-Assisted Research Tools (optional, low priority)
+### 4. Reconcile README and plan.md Status Wording
 
-**Priority: Low / Optional** — defer until paper trading accumulates meaningful data.
+**Priority: Low** — housekeeping, prevents confusion when sharing with others.
 
-**Concept:**
-- Strategy parameter search: use the backtest engine as an evaluation function, sweep params
-  (e.g. RSI window, Donchian window), rank by Sharpe on out-of-sample window.
-- LLM-prompted indicator suggestions: describe a market condition → LLM proposes indicator
-  thresholds → auto-run as a backtest → report results.
-- All candidates must pass the same risk rules as production strategies.
+**Issue:** The README roadmap table and `plan.md` may overstate or inconsistently describe
+completion status for Phases 5 and 7. Phase 7 row in the README previously read "Analytics +
+iteration" (that work shipped in Phase 5). These should be aligned so someone reading either
+file gets the same picture.
 
-**Not started. No files planned yet.**
+**Files to check and update as needed:**
+- `README.md` — roadmap table phase descriptions and status markers
+- `plan.md` — phase headers and status markers
+
+**Rule:** Only mark a phase complete if all planned deliverables listed in `plan.md` are
+actually implemented. If a phase is partial, say so.
+
+---
+
+### 5. Phase 8 — AI-Assisted Research Tools (deferred)
+
+**Do not start this yet.** No AI feature work until:
+- Walk-forward testing is in place and passing
+- Meaningful paper-trading history exists (weeks of data, not days)
+
+When the time comes, the concept is: use the backtest engine as an evaluation function for
+parameter search or LLM-suggested indicator variants. All candidates must pass the same risk
+rules as production strategies.
+
+**Not started. No files planned. Revisit in a future session.**
 
 ---
 
 ## Files Safe to Modify This Session
 
-All Python source files, test files, config files, and docs are safe — the running bot
-loaded them at startup. Edits will take effect on the next bot restart, not mid-run.
+All Python source files, test files, and docs are safe — the running bot loaded them at startup.
+Edits take effect on the next bot restart, not mid-run.
+
+**Config files:** Safe to create new ones or edit configs the bot is NOT currently using.
+Do not modify `config/paper_fast.yaml` directly while the bot runs — prefer creating a separate
+config file for any experiments (e.g. `config/paper_experiment.yaml`).
 
 ## Files That Must NOT Be Modified This Session
 
@@ -124,31 +155,14 @@ loaded them at startup. Edits will take effect on the next bot restart, not mid-
 | `data/cryptobot.sqlite` | Bot is actively writing journal rows |
 | `data/*.parquet` | Bot reads/writes bar cache each poll |
 | `logs/` | Bot is writing structured JSON logs |
+| `config/paper_fast.yaml` | Currently loaded config — edit only after restart |
 
 ---
 
 ## Recommended Execution Order
 
-1. `n_bars_held` comment — do it in 2 minutes as a warmup
-2. Windows Unicode fix — 15 minutes, improves daily dev experience
-3. Walk-forward backtest — main work item, 1–2 hours
-4. Phase 8 — defer to a future session after paper data is available
-
----
-
-## Architecture Notes for Walk-Forward Implementation
-
-The existing backtest engine bar-loop ordering is **load-bearing** (from `CLAUDE.md`):
-```
-settle fills → check stops → mark equity → strategy → risk → submit
-```
-Do not reorder when slicing bars for walk-forward. Each fold should construct a fresh
-`BacktestEngine`, `BacktestBroker`, and `RiskManager` instance — no shared state between folds.
-
-The `WalkForwardEngine` should accept the same inputs as `run_backtest`:
-- `bars: list[Bar]` — full historical series
-- `settings: Settings` — strategy params, risk caps, fees
-- `folds: int` — number of folds (default 5)
-- `in_sample_pct: float` — fraction of each fold used for training (default 0.7)
-
-Return type: `list[FoldResult]` where `FoldResult` holds `(in_sample: BacktestResult, out_sample: BacktestResult, fold_bars_in: list[Bar], fold_bars_out: list[Bar])`.
+1. `n_bars_held` comment — trivial warmup
+2. Windows Unicode fix — 15 minutes, daily dev improvement
+3. README/plan.md reconciliation — 10 minutes, clean housekeeping
+4. Walk-forward backtest — main work item
+5. Phase 8 — future session only
