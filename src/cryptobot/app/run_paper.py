@@ -23,9 +23,9 @@ Assumptions and design notes
 - Consecutive-loss tracking: after each SELL fill, PnL is compared to the
   recorded entry avg_price. Losses increment `consecutive_losses`; a win resets
   it to 0. After `cooldown_bars` bars the counter is also reset by timeout.
-- Stop-loss monitoring on live bars (checking bar.low against a stop price) is
-  NOT implemented in paper v1. The strategy must emit an explicit SELL intent
-  to close the position. TODO: add to PaperBroker in Phase 5.
+- Stop-loss monitoring: after settle_pending(), check_stops() fires any stop
+  registered at BUY time when bar.low <= stop_price. The position is closed at
+  stop_price with adverse slippage. Manual SELL also clears the registered stop.
 - Gross exposure = equity - cash (mark-to-market position value). This avoids
   accessing private broker state and is algebraically correct.
 """
@@ -200,6 +200,17 @@ def main(config_path: str | Path) -> str:
                     rc.cooldown_bars, log,
                 )
 
+            # 1b. Check stop-loss triggers against this bar's low.
+            stop_fills = broker.check_stops(bar)
+            for fill in stop_fills:
+                if warmup_remaining <= 0:
+                    record_fill(session_factory, fill)
+                _process_sell_fill(
+                    fill, symbol, entry_avg_prices,
+                    consecutive_losses, cooldown_remaining,
+                    rc.cooldown_bars, log,
+                )
+
             # 2. Update mark price for equity().
             broker.update_price(symbol, bar.close)
 
@@ -351,10 +362,13 @@ def main(config_path: str | Path) -> str:
                                 rc.cooldown_bars, log,
                                 entry_override=pos_before_fill.avg_price,
                             )
+                            broker.clear_stop(symbol)
                         elif intent.side == Side.BUY:
                             pos_now = broker.positions().get(symbol)
                             if pos_now and pos_now.qty > Decimal("0"):
                                 entry_avg_prices[symbol] = pos_now.avg_price
+                                if intent.stop_price is not None:
+                                    broker.register_stop(intent.symbol, intent.stop_price)
 
     except KeyboardInterrupt:
         log.info("paper_shutdown", reason="KeyboardInterrupt")

@@ -416,3 +416,115 @@ def test_recent_fills_includes_limit_fills():
     bar = _bar(close=100.0, low=94.0)
     broker.settle_pending(bar)
     assert len(broker.recent_fills()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Stop-loss tests
+# ---------------------------------------------------------------------------
+
+def test_check_stops_triggers_when_low_breaches_stop():
+    """check_stops() fires when bar.low <= stop_price."""
+    broker = _broker(fees=_zero_fees())
+    broker.update_price(_SYMBOL, Decimal("100"))
+    broker.submit(_market_buy(qty=1.0))
+    broker.register_stop(_SYMBOL, Decimal("90"))
+
+    # bar.low=85 < stop=90 → should trigger
+    bar = _bar(close=85.0, open_=95.0, high=95.0, low=85.0, idx=1)
+    fills = broker.check_stops(bar)
+
+    assert len(fills) == 1
+    assert float(fills[0].qty) == pytest.approx(1.0)
+    # Position should be closed
+    pos = broker.positions().get(_SYMBOL)
+    assert pos is None or float(pos.qty) == pytest.approx(0.0)
+
+
+def test_check_stops_does_not_trigger_when_low_above_stop():
+    """check_stops() is a no-op when bar.low > stop_price."""
+    broker = _broker(fees=_zero_fees())
+    broker.update_price(_SYMBOL, Decimal("100"))
+    broker.submit(_market_buy(qty=1.0))
+    broker.register_stop(_SYMBOL, Decimal("90"))
+
+    # bar.low=95 > stop=90 → no trigger
+    bar = _bar(close=98.0, open_=100.0, high=101.0, low=95.0, idx=1)
+    fills = broker.check_stops(bar)
+
+    assert len(fills) == 0
+    pos = broker.positions().get(_SYMBOL)
+    assert pos is not None and float(pos.qty) == pytest.approx(1.0)
+
+
+def test_check_stops_fills_at_stop_price_not_bar_low():
+    """Fill price is stop_price (with slippage), not bar.low."""
+    broker = _broker(fees=_zero_fees())
+    broker.update_price(_SYMBOL, Decimal("100"))
+    broker.submit(_market_buy(qty=1.0))
+    broker.register_stop(_SYMBOL, Decimal("90"))
+
+    bar = _bar(close=80.0, open_=95.0, high=95.0, low=75.0, idx=1)  # gapped way below stop
+    fills = broker.check_stops(bar)
+
+    assert len(fills) == 1
+    # With zero slippage, fill price == stop_price (not bar.low)
+    assert float(fills[0].price) == pytest.approx(90.0)
+
+
+def test_check_stops_applies_adverse_slippage():
+    """Stop sell fills below stop_price when slippage > 0."""
+    broker = _broker(fees=_real_fees())
+    broker.update_price(_SYMBOL, Decimal("100"))
+    broker.submit(_market_buy(qty=1.0))
+    broker.register_stop(_SYMBOL, Decimal("90"))
+
+    bar = _bar(close=85.0, open_=95.0, high=95.0, low=80.0, idx=1)
+    fills = broker.check_stops(bar)
+
+    assert len(fills) == 1
+    assert float(fills[0].price) < 90.0  # slippage worsened the sell price
+
+
+def test_check_stops_clears_stop_after_trigger():
+    """After stop fires, a second bar does not re-trigger."""
+    broker = _broker(fees=_zero_fees())
+    broker.update_price(_SYMBOL, Decimal("100"))
+    broker.submit(_market_buy(qty=1.0))
+    broker.register_stop(_SYMBOL, Decimal("90"))
+
+    bar1 = _bar(close=85.0, open_=95.0, high=95.0, low=80.0, idx=1)
+    broker.check_stops(bar1)
+
+    # Buy back in so there's a position, but stop should be gone
+    broker.update_price(_SYMBOL, Decimal("85"))
+    broker.submit(_market_buy(qty=1.0))
+
+    bar2 = _bar(close=82.0, open_=84.0, high=84.0, low=79.0, idx=2)
+    fills2 = broker.check_stops(bar2)
+    assert len(fills2) == 0  # no stop registered
+
+
+def test_clear_stop_prevents_trigger():
+    """clear_stop() after a manual SELL means check_stops() is a no-op."""
+    broker = _broker(fees=_zero_fees())
+    broker.update_price(_SYMBOL, Decimal("100"))
+    broker.submit(_market_buy(qty=1.0))
+    broker.register_stop(_SYMBOL, Decimal("90"))
+
+    # Manual SELL clears the stop
+    broker.submit(_market_sell(qty=1.0))
+    broker.clear_stop(_SYMBOL)
+
+    bar = _bar(close=85.0, open_=95.0, high=95.0, low=80.0, idx=1)
+    fills = broker.check_stops(bar)
+    assert len(fills) == 0
+
+
+def test_check_stops_no_op_without_position():
+    """check_stops() is safe to call with a registered stop but no position."""
+    broker = _broker(fees=_zero_fees())
+    broker.register_stop(_SYMBOL, Decimal("90"))
+
+    bar = _bar(close=80.0, open_=95.0, high=95.0, low=75.0, idx=1)
+    fills = broker.check_stops(bar)
+    assert len(fills) == 0

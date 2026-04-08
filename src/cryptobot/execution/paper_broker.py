@@ -50,6 +50,7 @@ class PaperBroker(Broker):
         self._fills: collections.deque[Fill] = collections.deque(maxlen=_MAX_FILL_HISTORY)
         self._pending_limits: list[Order] = []   # limit orders awaiting fill
         self._mark_prices: dict[str, Decimal] = {}
+        self._stops: dict[str, Decimal] = {}     # symbol → stop price
 
     # ------------------------------------------------------------------
     # Price updates (called by the run loop before each bar is processed)
@@ -156,6 +157,58 @@ class PaperBroker(Broker):
 
         self._pending_limits = remaining
         return new_fills
+
+    def check_stops(self, bar: Bar) -> list[Fill]:
+        """Close any long position whose stop was breached during this bar.
+
+        Called after settle_pending() and before the strategy sees the bar,
+        mirroring the BacktestBroker ordering. Fills at stop_price with adverse
+        slippage (taker rate). If bar.low > stop_price, no fill occurs.
+        """
+        stop_fills: list[Fill] = []
+        symbol = bar.symbol
+        stop_price = self._stops.get(symbol)
+        if stop_price is None:
+            return stop_fills
+
+        pos = self._positions.get(symbol)
+        if pos is None or pos.qty <= Decimal("0"):
+            self._stops.pop(symbol, None)
+            return stop_fills
+
+        if bar.low <= stop_price:
+            stop_order = Order(
+                order_id=new_order_id(),
+                run_id="stop",
+                strategy_id="stop_loss",
+                symbol=symbol,
+                side=Side.SELL,
+                qty=pos.qty,
+                order_type=OrderType.MARKET,
+                limit_price=None,
+                ts_submitted=bar.ts_open,
+                status=OrderStatus.ACCEPTED,
+            )
+            fill = self._execute(stop_order, stop_price, bar.ts_open, taker=True)
+            stop_fills.append(fill)
+            self._stops.pop(symbol, None)
+            log.info(
+                "stop_triggered",
+                symbol=symbol,
+                stop_price=float(stop_price),
+                fill_price=float(fill.price),
+                qty=float(fill.qty),
+            )
+
+        return stop_fills
+
+    def register_stop(self, symbol: str, stop_price: Decimal) -> None:
+        """Store a stop price for an open long position."""
+        self._stops[symbol] = stop_price
+
+    def clear_stop(self, symbol: str) -> None:
+        """Remove any registered stop for this symbol (call after manual SELL)."""
+        self._stops.pop(symbol, None)
 
     # ------------------------------------------------------------------
     # Internal helpers
