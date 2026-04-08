@@ -349,15 +349,13 @@ def test_sell_clamped_to_held_qty():
     assert broker.cash > 0.0
 
 
-def test_sell_with_no_position_creates_zero_qty_fill():
-    """Selling when flat results in a zero-qty fill, not an error."""
+def test_sell_with_no_position_is_rejected():
+    """Selling when flat returns REJECTED and creates no fill."""
     broker = _broker()
     broker.update_price(_SYMBOL, Decimal("100"))
     submitted = broker.submit(_market_sell(qty=0.1))
-    # Order completes without crashing; qty in fill is 0.
-    fills = broker.recent_fills()
-    assert len(fills) == 1
-    assert float(fills[0].qty) == pytest.approx(0.0)
+    assert submitted.status == OrderStatus.REJECTED
+    assert len(broker.recent_fills()) == 0
 
 
 # ---------------------------------------------------------------------------

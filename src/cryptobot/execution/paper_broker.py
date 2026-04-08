@@ -185,6 +185,15 @@ class PaperBroker(Broker):
                     available=round(self._cash, 2),
                 )
                 return replace(order, status=OrderStatus.REJECTED)
+        else:
+            held = self._positions.get(order.symbol)
+            held_qty = held.qty if held else Decimal("0")
+            if held_qty <= Decimal("0"):
+                log.warning(
+                    "market_sell_rejected_no_position",
+                    symbol=order.symbol,
+                )
+                return replace(order, status=OrderStatus.REJECTED)
 
         self._execute(order, price, order.ts_submitted, taker=True)
         return replace(order, status=OrderStatus.FILLED)
