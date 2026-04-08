@@ -187,6 +187,17 @@ EnsembleStrategy(Strategy)     ← new; wraps sub-strategies via config
 
 ---
 
+## Known fixes pending
+
+From 2026-04-08 audit — minor items to clean up before or alongside Phase 7:
+
+- **README Phase 7 label**: Roadmap table still says "Analytics + iteration" for Phase 7 — that
+  work shipped in Phase 5. Update Phase 7 row to "Ensemble strategy system".
+- **`n_bars_held` in analytics**: `reconstruct_trades()` hardcodes `n_bars_held=0` for DB-sourced
+  trades. Not a bug, but worth a note in the code for anyone reading the analytics output.
+
+---
+
 ## Explicitly deferred / out of scope
 
 These were identified in the 2026-04-07 design review and deliberately not implemented:
