@@ -2,10 +2,10 @@
 
 A safety-first, modular crypto trading framework for a solo builder.
 
-> **Status: v1 scaffold (Phase 1).** Research, backtesting, and paper trading
-> only. Live trading is intentionally **not** implemented and will only be
-> introduced in a later phase, with tiny notional caps and after weeks of
-> validated paper trading. This is **not** a money printer.
+> **Status: Phase 5 in progress.** Backtesting and paper trading are fully
+> implemented and validated. Live trading is intentionally **not** implemented
+> and will only be introduced after weeks of validated paper trading, with tiny
+> notional caps. This is **not** a money printer.
 
 ---
 
@@ -144,16 +144,14 @@ written to YAML or to logs.
 
 | Phase | Goal                                | Status |
 |-------|-------------------------------------|--------|
-| 1     | Scaffold + config + logging         | **in progress** |
-| 2     | Market data ingestion + persistence | TODO   |
-| 3     | Strategy engine + backtest          | TODO   |
-| 4     | Paper trading                       | TODO   |
-| 5     | Risk controls + monitoring          | TODO   |
+| 1     | Scaffold + config + logging         | **complete** |
+| 2     | Market data ingestion + persistence | **partial** (fetch works; BarStore write/read stubbed) |
+| 3     | Strategy engine + backtest          | **complete** |
+| 4     | Paper trading                       | **complete** |
+| 5     | Risk controls + monitoring          | **in progress** |
 | 6     | Tiny-size live trading (gated)      | TODO   |
 | 7     | Analytics + iteration               | TODO   |
 | 8     | Optional AI-assisted research tools | TODO   |
-
-See `/root/.claude/plans/misty-questing-wren.md` for the full design plan.
 
 ---
 
