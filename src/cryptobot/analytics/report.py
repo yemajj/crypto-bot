@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from cryptobot.analytics.queries import (
     daily_summary,
     fee_impact,
+    get_equity_curve,
     get_fills_with_orders,
     get_run,
     list_runs,
@@ -40,14 +41,18 @@ def build_report(run_id: str, db_url: str) -> RunReport:
     fi = fee_impact(trades)
     days = daily_summary(trades)
 
-    # Derive timeframe from run notes or fall back to "1h".
-    # The run notes field stores "final_equity=XXXX"; timeframe is not stored
-    # in the DB, so we default to "1h" for Sharpe annualisation.
+    # Timeframe is not stored in the DB; default to "1h" for Sharpe annualisation.
     timeframe = "1h"
 
-    # Reconstruct equity curve from net_pnl sequence.
     starting_cash = _parse_starting_cash(run.notes)
-    equity_curve = _build_equity_curve(starting_cash, trades)
+
+    # Prefer DB equity snapshots (accurate mark-to-market); fall back to
+    # reconstructing from closed-trade PnL when snapshots are unavailable.
+    db_curve = get_equity_curve(sf, run_id)
+    if len(db_curve) >= 2:
+        equity_curve = [starting_cash] + db_curve
+    else:
+        equity_curve = _build_equity_curve(starting_cash, trades)
 
     # Convert to ClosedTrade for reuse of compute_metrics.
     ct_list = [

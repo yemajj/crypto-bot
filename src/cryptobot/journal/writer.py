@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, Session
 
 from cryptobot.core.types import Fill, Order, Signal
-from cryptobot.journal.models import Base, FillRow, OrderRow, Run, SignalRow
+from cryptobot.journal.models import Base, EquitySnapshotRow, FillRow, OrderRow, Run, SignalRow
 from cryptobot.monitoring.logging_setup import get_logger
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -136,6 +136,51 @@ def record_fill(
                 fee_currency=fill.fee_currency,
             )
         )
+        session.commit()
+
+
+def record_equity_snapshot(
+    factory: sessionmaker[Session],
+    run_id: str,
+    bar_ts: datetime,
+    equity: float,
+    cash: float,
+) -> None:
+    """Append one equity snapshot row for a bar. Non-idempotent."""
+    with factory() as session:
+        session.add(
+            EquitySnapshotRow(
+                run_id=run_id,
+                bar_ts=bar_ts,
+                equity=equity,
+                cash=cash,
+            )
+        )
+        session.commit()
+
+
+def record_equity_snapshots_bulk(
+    factory: sessionmaker[Session],
+    run_id: str,
+    bar_timestamps: list[datetime],
+    equity_curve: list[float],
+) -> None:
+    """Insert equity snapshots in a single transaction (backtest use).
+
+    `equity_curve[0]` is starting cash (pre-loop); `equity_curve[i+1]` is the
+    equity at the close of `bar_timestamps[i]`. cash is unknown for backtests
+    so it is stored as 0.0.
+    """
+    with factory() as session:
+        for i, ts in enumerate(bar_timestamps):
+            # equity_curve[0] = starting cash, equity_curve[i+1] = bar i close
+            eq = equity_curve[i + 1] if i + 1 < len(equity_curve) else equity_curve[-1]
+            session.add(EquitySnapshotRow(
+                run_id=run_id,
+                bar_ts=ts,
+                equity=eq,
+                cash=0.0,
+            ))
         session.commit()
 
 

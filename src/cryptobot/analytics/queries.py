@@ -17,7 +17,7 @@ from datetime import date, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from cryptobot.journal.models import FillRow, OrderRow, Run
+from cryptobot.journal.models import EquitySnapshotRow, FillRow, OrderRow, Run
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +268,24 @@ def strategy_breakdown(trades: list[TradeRecord]) -> list[StrategyStats]:
             win_rate=wins / len(ts) if ts else 0.0,
         ))
     return result
+
+
+def get_equity_curve(session_factory: sessionmaker, run_id: str) -> list[float]:
+    """Return the equity curve for a run from stored snapshots (oldest first).
+
+    Returns an empty list if no snapshots exist.
+    """
+    with session_factory() as s:
+        rows = (
+            s.execute(
+                select(EquitySnapshotRow)
+                .where(EquitySnapshotRow.run_id == run_id)
+                .order_by(EquitySnapshotRow.bar_ts)
+            )
+            .scalars()
+            .all()
+        )
+        return [r.equity for r in rows]
 
 
 def fee_impact(trades: list[TradeRecord]) -> FeeImpact:

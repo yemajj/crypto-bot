@@ -1,10 +1,11 @@
 """SQLAlchemy models for the trade journal.
 
 Tables:
-- runs:    every invocation of the bot (backtest or paper).
-- signals: strategy signals emitted during a run.
-- orders:  orders submitted to a broker (after risk checks).
-- fills:   executions of orders.
+- runs:             every invocation of the bot (backtest or paper).
+- signals:          strategy signals emitted during a run.
+- orders:           orders submitted to a broker (after risk checks).
+- fills:            executions of orders.
+- equity_snapshots: mark-to-market equity recorded at the close of each bar.
 
 All timestamps are UTC.
 """
@@ -79,3 +80,13 @@ class FillRow(Base):
     fee_currency: Mapped[str] = mapped_column(String, nullable=False, default="")
 
     order: Mapped[OrderRow] = relationship(back_populates="fills")
+
+
+class EquitySnapshotRow(Base):
+    __tablename__ = "equity_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), index=True)
+    bar_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    equity: Mapped[float] = mapped_column(Float, nullable=False)
+    cash: Mapped[float] = mapped_column(Float, nullable=False)

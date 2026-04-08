@@ -31,6 +31,7 @@ from cryptobot.journal.writer import (
     build_engine as build_db_engine,
     init_db,
     make_session_factory,
+    record_equity_snapshots_bulk,
     record_fill,
     record_order,
     record_run_end,
@@ -213,11 +214,13 @@ def main(config_path: str | Path, data_path: str | Path | None = None) -> str:
     init_db(settings.env.db_url)
     db_engine = build_db_engine(settings.env.db_url)
     sf = make_session_factory(db_engine)
-    record_run_start(sf, run_id, mode="backtest", strategy_name=sc.name)
+    record_run_start(sf, run_id, mode="backtest", strategy_name=sc.name,
+                     notes=f"starting_cash={starting_cash:.2f}")
     for order in result.orders:
         record_order(sf, run_id, order)
     for fill in result.fills:
         record_fill(sf, fill)
+    record_equity_snapshots_bulk(sf, run_id, [b.ts_open for b in bars], result.equity_curve)
     record_run_end(sf, run_id, notes=f"final_equity={result.final_equity:.2f}")
 
     _print_report(result, symbol, timeframe, bars, settings.run.fees.taker_bps)
