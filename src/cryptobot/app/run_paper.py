@@ -308,7 +308,8 @@ def main(config_path: str | Path) -> str:
                 )
 
                 submitted = broker.submit(order)
-                order_timestamps.append(bar.ts_open)
+                if submitted.status in {OrderStatus.FILLED, OrderStatus.ACCEPTED}:
+                    order_timestamps.append(bar.ts_open)
                 record_order(session_factory, run_id, submitted)
 
                 log.info(
