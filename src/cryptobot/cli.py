@@ -59,6 +59,37 @@ def paper(
 
 
 @app.command()
+def report(
+    run_id: str | None = typer.Option(None, "--run-id", help="Run ID to report on (default: latest)."),
+    list_runs: bool = typer.Option(False, "--list", help="List recent runs instead of reporting."),
+) -> None:
+    """Print a performance report for a backtest or paper run."""
+    from cryptobot.analytics.report import build_report, list_runs_report
+    from cryptobot.journal.writer import build_engine, make_session_factory
+    from cryptobot.analytics.queries import list_runs as _list_runs
+
+    settings = load_settings()
+    db_url = settings.env.db_url
+
+    if list_runs:
+        typer.echo(list_runs_report(db_url))
+        return
+
+    if run_id is None:
+        # Resolve the most recent run.
+        eng = build_engine(db_url)
+        sf = make_session_factory(eng)
+        runs = _list_runs(sf, n=1)
+        if not runs:
+            typer.echo("No runs found in the journal. Run a backtest or paper session first.", err=True)
+            raise typer.Exit(code=1)
+        run_id = runs[0].id
+
+    r = build_report(run_id, db_url)
+    typer.echo(r.summary)
+
+
+@app.command()
 def live() -> None:
     """Refuses to run in v1 — live trading is disabled by design."""
     try:
