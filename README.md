@@ -2,11 +2,11 @@
 
 A safety-first, modular crypto trading framework for a solo builder.
 
-> **Status: Phases 1–5 complete.** Backtesting, paper trading, analytics reporting,
-> Telegram notifications, bar caching, and historical data ingestion are fully
-> implemented. Live trading is intentionally **not** implemented and will only be
-> introduced after weeks of validated paper trading, with tiny notional caps.
-> This is **not** a money printer.
+> **Status: Phases 1–5 and 7 complete.** Backtesting, paper trading, analytics reporting,
+> Telegram notifications, bar caching, historical data ingestion, and an ensemble strategy
+> system (RSI, Donchian, Bollinger, regime-aware weighted scoring) are fully implemented.
+> Live trading is intentionally **not** implemented and will only be introduced after weeks
+> of validated paper trading, with tiny notional caps. This is **not** a money printer.
 
 ---
 

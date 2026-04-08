@@ -180,6 +180,6 @@ def _pre_live_checklist(metrics, fi: "FeeImpact") -> list[str]:
     ]
     items = []
     for label, passed, current in gates:
-        tick = "\u2713" if passed else " "
+        tick = "OK  " if passed else "FAIL"
         items.append(f"[{tick}] {label:<26} (current: {current})")
     return items
