@@ -1,0 +1,57 @@
+mode: paper
+
+market:
+  symbols: [BTC/USDT]
+  timeframe: 1h
+
+strategy:
+  name: ensemble
+  params:
+    strategies:
+      - name: sma_crossover
+        bucket: trend
+        params: {fast: 20, slow: 50, atr_window: 14, risk_per_trade_pct: 0.005}
+      - name: rsi
+        bucket: momentum
+        params: {window: 14, oversold: 30, overbought: 70}
+      - name: donchian
+        bucket: breakout
+        params: {window: 20}
+      - name: bollinger
+        bucket: volatility
+        params: {window: 20, n_std: 2.0}
+    volume_filter:
+      strategy: volume_signal
+      params: {window: 20}
+      multiplier_scale: 0.25
+    regime_weights:
+      trending:       {trend: 0.40, momentum: 0.20, breakout: 0.25, volatility: 0.15}
+      ranging:        {trend: 0.12, momentum: 0.40, breakout: 0.13, volatility: 0.35}
+      breakout_watch: {trend: 0.18, momentum: 0.12, breakout: 0.40, volatility: 0.30}
+    buy_threshold: 0.30
+    sell_threshold: -0.30
+    min_agreeing_buckets: 2
+    agreement_min_magnitude: 0.25
+    atr_window: 14
+    stop_distance_multiplier: 1.5
+    risk_per_trade_pct: 0.005
+
+risk:
+  max_position_pct: 0.10
+  max_gross_exposure_pct: 0.50
+  max_daily_loss_pct: 0.02
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list: [BTC/USDT]
+  max_open_positions: 1
+  cooldown_after_losses: 3
+  cooldown_bars: 4
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 200
+poll_interval_seconds: 60.0

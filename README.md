@@ -151,7 +151,7 @@ written to YAML or to logs.
 | 4     | Paper trading                       | **complete** |
 | 5     | Risk controls + monitoring          | **complete** (Telegram alerts, equity snapshots, analytics reporting, pre-live checklist) |
 | 6     | Tiny-size live trading (gated)      | TODO   |
-| 7     | Analytics + iteration               | TODO   |
+| 7     | Ensemble strategy system            | TODO   |
 | 8     | Optional AI-assisted research tools | TODO   |
 
 ---
