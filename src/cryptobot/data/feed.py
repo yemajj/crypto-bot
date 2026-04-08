@@ -22,10 +22,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from cryptobot.core.types import Bar
+from cryptobot.core.types import Bar, BarGapError
 from cryptobot.exchanges.base import ExchangeClient
+from cryptobot.exchanges.ccxt_client import timeframe_to_seconds
 from cryptobot.monitoring.logging_setup import get_logger
 
 log = get_logger(component="feed")
@@ -59,6 +60,8 @@ class MarketDataFeed:
         (e.g. via kill switch or KeyboardInterrupt).
         """
         seen: dict[str, set[datetime]] = {s: set() for s in self._symbols}
+        last_ts: dict[str, datetime | None] = {s: None for s in self._symbols}
+        bar_td = timedelta(seconds=timeframe_to_seconds(self._timeframe))
 
         # --- Phase 1: warm-up ------------------------------------------------
         for symbol in self._symbols:
@@ -71,8 +74,10 @@ class MarketDataFeed:
             initial = self._client.fetch_ohlcv(
                 symbol, self._timeframe, limit=self._warmup_bars
             )
+            # fetch_ohlcv already checked intra-batch contiguity.
             for bar in initial:
                 seen[symbol].add(bar.ts_open)
+                last_ts[symbol] = bar.ts_open
                 yield bar
             log.info("feed_warmup_done", symbol=symbol, n_bars=len(initial))
 
@@ -86,6 +91,8 @@ class MarketDataFeed:
                     recent = self._client.fetch_ohlcv(
                         symbol, self._timeframe, limit=_POLL_FETCH_LIMIT
                     )
+                except BarGapError:
+                    raise  # intra-batch gap — halt the feed
                 except Exception as exc:
                     log.warning(
                         "feed_poll_error",
@@ -96,7 +103,19 @@ class MarketDataFeed:
 
                 for bar in recent:
                     if bar.ts_open not in seen[symbol]:
+                        # Cross-batch contiguity check.
+                        prev = last_ts[symbol]
+                        if prev is not None:
+                            expected = prev + bar_td
+                            if bar.ts_open != expected:
+                                raise BarGapError(
+                                    f"Bar gap in {symbol} {self._timeframe}: "
+                                    f"expected {expected.isoformat()} after "
+                                    f"{prev.isoformat()}, "
+                                    f"got {bar.ts_open.isoformat()}"
+                                )
                         seen[symbol].add(bar.ts_open)
+                        last_ts[symbol] = bar.ts_open
                         log.info(
                             "feed_new_bar",
                             symbol=symbol,

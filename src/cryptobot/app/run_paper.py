@@ -48,6 +48,7 @@ from cryptobot.core.types import (
     Signal,
     Side,
 )
+from cryptobot.core.types import BarGapError
 from cryptobot.data.feed import MarketDataFeed
 from cryptobot.exchanges.ccxt_client import CcxtClient
 from cryptobot.execution.fees import FeeModel
@@ -372,6 +373,8 @@ def main(config_path: str | Path) -> str:
 
     except KeyboardInterrupt:
         log.info("paper_shutdown", reason="KeyboardInterrupt")
+    except BarGapError as exc:
+        log.error("feed_bar_gap_halt", error=str(exc))
 
     finally:
         final_equity = broker.equity()

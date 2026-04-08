@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from cryptobot.core.types import Bar
+from cryptobot.core.types import Bar, BarGapError
 from cryptobot.exchanges.base import ExchangeClient
 from cryptobot.monitoring.logging_setup import get_logger
 
@@ -43,7 +43,7 @@ _TIMEFRAME_SECONDS: dict[str, int] = {
 }
 
 
-def _timeframe_to_seconds(timeframe: str) -> int:
+def timeframe_to_seconds(timeframe: str) -> int:
     """Convert a timeframe string like '1h' to seconds.
 
     Raises ValueError for unrecognised strings.
@@ -113,7 +113,7 @@ class CcxtClient(ExchangeClient):
             (incomplete) bar is always excluded.
         """
         self._ensure_client()
-        bar_duration = _timeframe_to_seconds(timeframe)
+        bar_duration = timeframe_to_seconds(timeframe)
         since_ms = int(since.timestamp() * 1000) if since else None
 
         try:
@@ -145,6 +145,18 @@ class CcxtClient(ExchangeClient):
                     volume=Decimal(str(vol)),
                 )
             )
+
+        # Verify consecutive bars are exactly one timeframe apart.
+        bar_td = timedelta(seconds=bar_duration)
+        for i in range(1, len(bars)):
+            expected = bars[i - 1].ts_open + bar_td
+            if bars[i].ts_open != expected:
+                raise BarGapError(
+                    f"Bar gap in {symbol} {timeframe}: "
+                    f"expected {expected.isoformat()} after "
+                    f"{bars[i - 1].ts_open.isoformat()}, "
+                    f"got {bars[i].ts_open.isoformat()}"
+                )
 
         return bars
 

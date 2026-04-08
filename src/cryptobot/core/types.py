@@ -13,6 +13,14 @@ from decimal import Decimal
 from enum import Enum
 
 
+class BarGapError(Exception):
+    """Raised when a batch of OHLCV bars contains a timestamp discontinuity.
+
+    The market data feed halts on this error — it signals missing bars that
+    would corrupt indicator calculations and potentially trigger phantom signals.
+    """
+
+
 class Side(str, Enum):
     BUY = "buy"
     SELL = "sell"
