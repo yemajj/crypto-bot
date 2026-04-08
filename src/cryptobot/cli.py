@@ -58,6 +58,50 @@ def paper(
     typer.echo(f"paper run_id={run_id}")
 
 
+@app.command("fetch-history")
+def fetch_history(
+    symbol: str = typer.Option(..., help="Trading pair, e.g. BTC/USDT."),
+    timeframe: str = typer.Option("1h", help="Bar timeframe, e.g. 1h, 4h, 1d."),
+    since: str = typer.Option(..., help="Start date (UTC), e.g. 2024-01-01."),
+    until: str | None = typer.Option(None, help="End date (UTC, exclusive). Defaults to now."),
+) -> None:
+    """Fetch historical OHLCV bars from the exchange and store them locally."""
+    from datetime import datetime, timezone
+
+    from cryptobot.data.loader import HistoricalLoader
+    from cryptobot.data.storage import BarStore
+    from cryptobot.exchanges.ccxt_client import CcxtClient
+
+    settings = load_settings()
+
+    try:
+        since_dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        typer.echo(f"error: --since must be YYYY-MM-DD, got {since!r}", err=True)
+        raise typer.Exit(code=1)
+
+    until_dt: datetime | None = None
+    if until is not None:
+        try:
+            until_dt = datetime.strptime(until, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            typer.echo(f"error: --until must be YYYY-MM-DD, got {until!r}", err=True)
+            raise typer.Exit(code=1)
+
+    client = CcxtClient(
+        name=settings.env.exchange_name,
+        api_key=settings.env.exchange_api_key,
+        api_secret=settings.env.exchange_api_secret,
+        testnet=settings.env.exchange_testnet,
+    )
+    bar_store = BarStore(settings.env.data_dir)
+    loader = HistoricalLoader(client, bar_store)
+
+    typer.echo(f"Fetching {symbol} {timeframe} from {since}" + (f" to {until}" if until else " to now") + " …")
+    n = loader.fetch(symbol, timeframe, since=since_dt, until=until_dt)
+    typer.echo(f"Done. {n:,} bars written to {settings.env.data_dir}")
+
+
 @app.command()
 def report(
     run_id: str | None = typer.Option(None, "--run-id", help="Run ID to report on (default: latest)."),
