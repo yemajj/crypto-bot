@@ -72,15 +72,15 @@ def build_report(run_id: str, db_url: str) -> RunReport:
     checklist = _pre_live_checklist(metrics, fi)
 
     # --- Format ---
-    sep = "\u2501" * 53
-    thin = "\u2500" * 53
+    sep = "=" * 53
+    thin = "-" * 53
     start_s = run.started_at.strftime("%Y-%m-%d %H:%M") if run.started_at else "?"
     end_s = run.ended_at.strftime("%Y-%m-%d %H:%M") if run.ended_at else "running"
 
     lines: list[str] = []
     lines.append(f"\n{sep}")
     lines.append(f"  REPORT  {run_id}  [{run.mode}]")
-    lines.append(f"  {run.strategy}  |  {start_s} \u2192 {end_s}")
+    lines.append(f"  {run.strategy}  |  {start_s} -> {end_s}")
     lines.append(sep)
     lines.append(f"  Starting capital : ${starting_cash:>12,.2f}")
     lines.append(f"  Final equity     : ${equity_curve[-1]:>12,.2f}")
