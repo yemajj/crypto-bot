@@ -27,6 +27,15 @@ from cryptobot.core.ids import new_run_id
 from cryptobot.core.types import Bar
 from cryptobot.execution.backtest_broker import BacktestBroker
 from cryptobot.execution.fees import FeeModel
+from cryptobot.journal.writer import (
+    build_engine as build_db_engine,
+    init_db,
+    make_session_factory,
+    record_fill,
+    record_order,
+    record_run_end,
+    record_run_start,
+)
 from cryptobot.monitoring.logging_setup import setup_logging
 from cryptobot.risk.manager import RiskManager
 from cryptobot.risk.rules import (
@@ -200,6 +209,17 @@ def main(config_path: str | Path, data_path: str | Path | None = None) -> str:
     log.info("backtest_running", n_bars=len(bars))
     result = engine.run(run_id)
 
+    # --- Journal writes ---
+    init_db(settings.env.db_url)
+    db_engine = build_db_engine(settings.env.db_url)
+    sf = make_session_factory(db_engine)
+    record_run_start(sf, run_id, mode="backtest", strategy_name=sc.name)
+    for order in result.orders:
+        record_order(sf, run_id, order)
+    for fill in result.fills:
+        record_fill(sf, fill)
+    record_run_end(sf, run_id, notes=f"final_equity={result.final_equity:.2f}")
+
     _print_report(result, symbol, timeframe, bars, settings.run.fees.taker_bps)
     log.info(
         "backtest_complete",
@@ -227,9 +247,7 @@ def _print_report(
     end_ts = bars[-1].ts_open.strftime("%Y-%m-%d")
     starting = result.equity_curve[0]
 
-    # Estimate fees paid from n_trades and avg notional; actual comes from fills.
-    fills = [f for f in result.__dict__.get("_broker_fills", [])]
-    total_fees = sum(float(f.fee) for f in fills) if fills else 0.0
+    total_fees = sum(float(f.fee) for f in result.fills)
 
     sep = "━" * 51
     thin = "─" * 51

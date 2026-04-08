@@ -45,6 +45,8 @@ class BacktestResult:
     final_equity: float
     metrics: Metrics
     equity_curve: list[float]   # equity_curve[0] = starting cash, [i+1] = end of bar i
+    orders: list[Order]         # orders submitted during the run (excludes synthetic stops)
+    fills: list[Fill]           # all fills including stop-loss fills
 
 
 # Internal: full entry record stored while a trade is open.
@@ -80,6 +82,7 @@ class BacktestEngine:
         equity_curve: list[float] = [starting_equity]
         history: list[Bar] = []
         closed_trades: list[ClosedTrade] = []
+        submitted_orders: list[Order] = []
         bars_in_position: int = 0
 
         # Tracks the open entry while a long position is held.
@@ -186,7 +189,8 @@ class BacktestEngine:
                     ts_submitted=bar.ts_open,
                     status=OrderStatus.NEW,
                 )
-                self._broker.submit(order)
+                accepted = self._broker.submit(order)
+                submitted_orders.append(accepted)
                 order_timestamps.append(bar.ts_open)
 
                 if intent.side == Side.BUY and intent.stop_price is not None:
@@ -230,6 +234,8 @@ class BacktestEngine:
             final_equity=final_equity,
             metrics=metrics,
             equity_curve=equity_curve,
+            orders=submitted_orders,
+            fills=self._broker.recent_fills(),
         )
 
 
