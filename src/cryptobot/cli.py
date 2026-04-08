@@ -3,9 +3,10 @@
 Keeps the surface tiny in v1:
     cryptobot version
     cryptobot init-db
-    cryptobot backtest --config config/backtest.yaml   (Phase 3)
-    cryptobot paper    --config config/paper.yaml      (Phase 4)
-    cryptobot live                                     (disabled, Phase 6)
+    cryptobot backtest       --config config/backtest.yaml   (Phase 3)
+    cryptobot walk-forward   --config config/backtest.yaml --data ...
+    cryptobot paper          --config config/paper.yaml      (Phase 4)
+    cryptobot live                                           (disabled, Phase 6)
 """
 
 from __future__ import annotations
@@ -47,6 +48,34 @@ def backtest(
     """Run a backtest from a local OHLCV CSV file."""
     run_id = run_backtest.main(config, data)
     typer.echo(f"backtest complete: run_id={run_id}")
+
+
+@app.command("walk-forward")
+def walk_forward(
+    config: Path = typer.Option(..., exists=True, help="Path to backtest YAML."),
+    data: Path = typer.Option(..., exists=True, help="Path to OHLCV CSV file."),
+    folds: int = typer.Option(5, help="Number of rolling folds."),
+    in_sample_pct: float = typer.Option(0.7, help="Fraction of each fold used for in-sample."),
+) -> None:
+    """Run a rolling walk-forward validation on a local OHLCV CSV file."""
+    from cryptobot.backtest.walk_forward import print_walk_forward_report, run_walk_forward
+    from cryptobot.app.run_backtest import load_bars_from_csv
+
+    settings = load_settings(config)
+    symbol = settings.run.market.symbols[0]
+    timeframe = settings.run.market.timeframe
+
+    typer.echo(f"Loading bars from {data} …")
+    bars = load_bars_from_csv(data, symbol, timeframe)
+    typer.echo(f"Loaded {len(bars):,} bars. Running {folds}-fold walk-forward …")
+
+    try:
+        results = run_walk_forward(settings, bars, folds=folds, in_sample_pct=in_sample_pct)
+    except ValueError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    print_walk_forward_report(results, symbol, timeframe)
 
 
 @app.command()
