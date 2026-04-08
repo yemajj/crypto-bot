@@ -90,11 +90,26 @@ def _handle_sigterm(signum: int, frame: object) -> None:
     raise KeyboardInterrupt
 
 
+def _build_run_notes(config_path: str | Path, settings) -> str:
+    """Build structured notes stored with the paper run."""
+    config_name = Path(config_path).name
+    tokens = [
+        f"starting_cash={settings.run.starting_cash:.2f}",
+        f"config={config_name}",
+        f"symbol={settings.run.market.symbols[0]}",
+        f"timeframe={settings.run.market.timeframe}",
+    ]
+    if Path(config_path).stem == "paper_validation":
+        tokens.append("validation_profile=paper_validation")
+    return " ".join(tokens)
+
+
 def main(config_path: str | Path) -> str:
     signal.signal(signal.SIGTERM, _handle_sigterm)
 
     settings = load_settings(config_path)
     run_id = new_run_id("paper")
+    run_notes = _build_run_notes(config_path, settings)
     log = setup_logging(
         log_dir=settings.env.log_dir,
         level=settings.env.log_level,
@@ -119,7 +134,7 @@ def main(config_path: str | Path) -> str:
         run_id=run_id,
         mode="paper",
         strategy_name=settings.run.strategy.name,
-        notes=f"starting_cash={settings.run.starting_cash:.2f}",
+        notes=run_notes,
     )
 
     notifier = Notifier(

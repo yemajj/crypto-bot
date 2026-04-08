@@ -3,7 +3,7 @@ mode: paper
 market:
   symbols:
     - BTC/USDT
-  timeframe: 1h
+  timeframe: 5m
 
 strategy:
   name: sma_crossover
@@ -23,7 +23,7 @@ risk:
     - BTC/USDT
   max_open_positions: 1             # single-symbol, single position in v1
   cooldown_after_losses: 3          # pause new entries after 3 consecutive losses
-  cooldown_bars: 4                  # wait 4 bars (= 4h on 1h timeframe) before re-entering
+  cooldown_bars: 4                  # wait 4 bars (= 20m on 5m timeframe) before re-entering
 
 fees:
   taker_bps: 10.0                   # 0.10% — Binance spot taker
@@ -33,4 +33,4 @@ fees:
 # Paper-trading operational settings
 starting_cash: 10000.0              # simulated capital in USDT
 warmup_bars: 200                    # bars to pre-load before live signals begin
-poll_interval_seconds: 60.0         # how often to poll the exchange for new bars
+poll_interval_seconds: 30.0         # how often to poll the exchange for new bars (5m bars close every 300s)

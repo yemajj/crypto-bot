@@ -6,6 +6,7 @@ Keeps the surface tiny in v1:
     cryptobot backtest       --config config/backtest.yaml   (Phase 3)
     cryptobot walk-forward   --config config/backtest.yaml --data ...
     cryptobot paper          --config config/paper.yaml      (Phase 4)
+    cryptobot validate-paper                              (Phase 5/6 gate)
     cryptobot live                                           (disabled, Phase 6)
 """
 
@@ -160,6 +161,18 @@ def report(
 
     r = build_report(run_id, db_url)
     typer.echo(r.summary)
+
+
+@app.command("validate-paper")
+def validate_paper(
+    days: int = typer.Option(14, min=1, help="Lookback window in days for validation runs."),
+    run_id: list[str] = typer.Option(None, "--run-id", help="Explicit paper run_id to include. Repeatable."),
+) -> None:
+    """Summarize Phase 6 readiness across completed validation paper runs."""
+    from cryptobot.analytics.validation import build_validation_report
+
+    settings = load_settings()
+    typer.echo(build_validation_report(settings.env.db_url, days=days, run_ids=run_id or None))
 
 
 @app.command()

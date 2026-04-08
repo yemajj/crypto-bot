@@ -98,7 +98,14 @@
 
 **Goal:** Place real orders, but with strict size and safety constraints. Only after weeks of validated paper trading.
 
-**Prerequisites before writing a line of Phase 6 code:**
+**Validation tooling already shipped:**
+- `analytics/report.py` — per-run report with quantitative pre-live checklist
+- `analytics/validation.py` — multi-run validation summary for completed tagged paper runs
+- `cli.py` — `cryptobot report` and `cryptobot validate-paper`
+- `config/paper_validation.yaml` — standard long-running paper-validation profile
+- `docs/paper_validation.md` — runbook for manual and automated validation
+
+**Manual prerequisites before writing a line of Phase 6 code:**
 - [ ] Weeks of paper trading logs reviewed — no systematic bugs
 - [ ] Paper PnL matches backtest expectations within reasonable bounds
 - [ ] Kill switch and daily loss limits manually tested
@@ -171,8 +178,8 @@ SmaCrossover                   ← UNCHANGED
 EnsembleStrategy(Strategy)     ← new; wraps sub-strategies via config
 ```
 
-**Also planned (post-ensemble):**
-- Walk-forward backtest utility: split data into in-sample / out-of-sample windows, run backtest over each, compare metrics
+**Also delivered after ensemble:**
+- Walk-forward backtest utility: split data into in-sample / out-of-sample windows, run backtest over each, compare metrics via `cryptobot walk-forward`
 
 ---
 
@@ -184,17 +191,6 @@ EnsembleStrategy(Strategy)     ← new; wraps sub-strategies via config
 - Strategy parameter search using the backtest engine as the evaluation function
 - LLM-prompted indicator suggestions piped through the existing strategy ABC
 - Guardrails: all candidates must pass the same risk rules as production strategies
-
----
-
-## Known fixes pending
-
-From 2026-04-08 audit — minor items to clean up before or alongside Phase 7:
-
-- **README Phase 7 label**: Roadmap table still says "Analytics + iteration" for Phase 7 — that
-  work shipped in Phase 5. Update Phase 7 row to "Ensemble strategy system".
-- **`n_bars_held` in analytics**: `reconstruct_trades()` hardcodes `n_bars_held=0` for DB-sourced
-  trades. Not a bug, but worth a note in the code for anyone reading the analytics output.
 
 ---
 
@@ -232,6 +228,9 @@ cryptobot backtest --config config/backtest.yaml --data path/to/ohlcv.csv
 
 # paper trading
 cryptobot paper --config config/paper.yaml
+
+# paper validation summary
+cryptobot validate-paper
 
 # performance report
 cryptobot report                         # latest run

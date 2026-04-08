@@ -1,0 +1,39 @@
+# Long-running validation profile for Phase 6 readiness checks.
+# This is the standard paper-trading config for validation runs.
+# It is intentionally slower and more conservative than paper_fast.yaml.
+
+mode: paper
+
+market:
+  symbols:
+    - BTC/USDT
+  timeframe: 5m
+
+strategy:
+  name: sma_crossover
+  params:
+    fast: 20
+    slow: 50
+    risk_per_trade_pct: 0.005
+    atr_window: 14
+
+risk:
+  max_position_pct: 0.05
+  max_gross_exposure_pct: 0.25
+  max_daily_loss_pct: 0.01
+  max_orders_per_minute: 5
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+  max_open_positions: 1
+  cooldown_after_losses: 3
+  cooldown_bars: 4
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 200
+poll_interval_seconds: 30.0

@@ -156,6 +156,30 @@ written to YAML or to logs.
 
 ---
 
+## Paper validation
+
+Use `config/paper_validation.yaml` for long-running validation runs that count toward the Phase 6 gate.
+`config/paper_fast.yaml` is for development only and should not be treated as live-readiness evidence.
+
+```bash
+# preload validation data
+cryptobot fetch-history --symbol BTC/USDT --timeframe 5m --since 2024-01-01
+
+# start a validation run
+cryptobot paper --config config/paper_validation.yaml
+
+# inspect the latest run
+cryptobot report
+
+# inspect readiness across tagged validation runs
+cryptobot validate-paper
+cryptobot validate-paper --days 28
+```
+
+Stop a paper run with `Ctrl-C` or by creating the kill-switch file. For the full runbook and manual checks, see `docs/paper_validation.md`.
+
+---
+
 ## License
 
 MIT.
