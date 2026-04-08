@@ -1,7 +1,7 @@
 # cryptobot — Development Plan
 
 > Last updated: 2026-04-08  
-> Current phase: **Phases 1–5 complete. Phase 7 (ensemble strategy system) planned and ready for implementation.**
+> Current phase: **Phases 1–5 and Phase 7 complete. Phase 6 (live trading) gated on weeks of paper trading validation.**
 
 ---
 
@@ -115,7 +115,7 @@
 
 ---
 
-## Phase 7 — Ensemble strategy system 🔄 PLANNED
+## Phase 7 — Ensemble strategy system ✅ COMPLETE
 
 **Goal:** Add RSI, Donchian, and Bollinger strategies plus a weighted ensemble that composes
 them with regime-aware scoring — while leaving the existing SMA crossover and all run loops
