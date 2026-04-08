@@ -165,6 +165,7 @@ class BacktestEngine:
                 daily_pnl=daily_pnl,
                 orders_this_minute=len(order_timestamps),
                 open_intents_by_symbol=open_by_symbol,
+                mark_price_by_symbol={symbol: float(bar.close)},
             )
 
             # --- 8. Submit approved orders ---

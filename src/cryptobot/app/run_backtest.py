@@ -32,7 +32,9 @@ from cryptobot.risk.manager import RiskManager
 from cryptobot.risk.rules import (
     KillSwitchFile,
     MaxDailyLoss,
+    MaxGrossExposurePct,
     MaxOrdersPerMinute,
+    MaxPositionSizePct,
     OneOrderPerSymbolInFlight,
     RequireStopLoss,
     SymbolAllowList,
@@ -184,6 +186,8 @@ def main(config_path: str | Path, data_path: str | Path | None = None) -> str:
         rules.append(RequireStopLoss())
     rules += [
         MaxDailyLoss(max_loss_pct=rc.max_daily_loss_pct),
+        MaxPositionSizePct(rc.max_position_pct),
+        MaxGrossExposurePct(rc.max_gross_exposure_pct),
         KillSwitchFile(settings.env.kill_switch_file),
     ]
     risk = RiskManager(rules)

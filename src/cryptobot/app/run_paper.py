@@ -68,8 +68,10 @@ from cryptobot.risk.rules import (
     CooldownAfterLoss,
     KillSwitchFile,
     MaxDailyLoss,
+    MaxGrossExposurePct,
     MaxOpenPositions,
     MaxOrdersPerMinute,
+    MaxPositionSizePct,
     OneOrderPerSymbolInFlight,
     RequireStopLoss,
     RiskState,
@@ -137,6 +139,8 @@ def main(config_path: str | Path) -> str:
         rules.append(RequireStopLoss())
     rules += [
         MaxDailyLoss(max_loss_pct=rc.max_daily_loss_pct),
+        MaxPositionSizePct(rc.max_position_pct),
+        MaxGrossExposurePct(rc.max_gross_exposure_pct),
         KillSwitchFile(settings.env.kill_switch_file),
         MaxOpenPositions(rc.max_open_positions),
     ]
@@ -261,6 +265,9 @@ def main(config_path: str | Path) -> str:
                 orders_this_minute=len(order_timestamps),
                 open_intents_by_symbol=open_by_symbol,
                 consecutive_losses=consecutive_losses[symbol],
+                mark_price_by_symbol={
+                    k: float(v) for k, v in broker._mark_prices.items()
+                },
             )
 
             # 8. Risk-check and submit.

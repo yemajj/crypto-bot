@@ -9,7 +9,9 @@ from cryptobot.risk.manager import RiskManager
 from cryptobot.risk.rules import (
     KillSwitchFile,
     MaxDailyLoss,
+    MaxGrossExposurePct,
     MaxOrdersPerMinute,
+    MaxPositionSizePct,
     OneOrderPerSymbolInFlight,
     RequireStopLoss,
     RiskState,
@@ -94,6 +96,70 @@ def test_risk_manager_short_circuits_on_first_denial(tmp_path: Path):
     decision = mgr.evaluate(_intent(stop=None), _state())
     assert not decision.verdict.allowed
     assert "kill switch" in decision.verdict.reason
+
+
+def test_max_position_size_pct_allows_within_cap():
+    rule = MaxPositionSizePct(max_pct=0.10)
+    # qty=0.01, price=100 → notional=1.0, equity=1000 → ratio=0.001 < 0.10
+    state = _state(mark_price_by_symbol={"BTC/USDT": 100.0})
+    assert rule.check(_intent(), state).allowed
+
+
+def test_max_position_size_pct_denies_over_cap():
+    rule = MaxPositionSizePct(max_pct=0.10)
+    # qty=0.01, price=20000 → notional=200, equity=1000 → ratio=0.20 > 0.10
+    intent = Intent(
+        strategy_id="test", symbol="BTC/USDT", side=Side.BUY,
+        qty=Decimal("0.01"), order_type=OrderType.MARKET,
+        stop_price=Decimal("100"), reason="test",
+    )
+    state = _state(mark_price_by_symbol={"BTC/USDT": 20_000.0})
+    assert not rule.check(intent, state).allowed
+
+
+def test_max_position_size_pct_denies_when_no_price():
+    rule = MaxPositionSizePct(max_pct=0.10)
+    assert not rule.check(_intent(), _state()).allowed
+
+
+def test_max_position_size_pct_allows_sell():
+    rule = MaxPositionSizePct(max_pct=0.10)
+    sell_intent = Intent(
+        strategy_id="test", symbol="BTC/USDT", side=Side.SELL,
+        qty=Decimal("0.01"), order_type=OrderType.MARKET,
+        stop_price=None, reason="test",
+    )
+    assert rule.check(sell_intent, _state()).allowed
+
+
+def test_max_gross_exposure_pct_allows_within_cap():
+    rule = MaxGrossExposurePct(max_pct=0.50)
+    # existing exposure=0, notional=1.0 (qty=0.01, price=100), equity=1000 → 0.001 < 0.50
+    state = _state(gross_exposure=0.0, mark_price_by_symbol={"BTC/USDT": 100.0})
+    assert rule.check(_intent(), state).allowed
+
+
+def test_max_gross_exposure_pct_denies_over_cap():
+    rule = MaxGrossExposurePct(max_pct=0.50)
+    # existing exposure=400, notional=200 (qty=0.01, price=20000), equity=1000
+    # projected = (400+200)/1000 = 0.60 > 0.50
+    intent = Intent(
+        strategy_id="test", symbol="BTC/USDT", side=Side.BUY,
+        qty=Decimal("0.01"), order_type=OrderType.MARKET,
+        stop_price=Decimal("100"), reason="test",
+    )
+    state = _state(gross_exposure=400.0, mark_price_by_symbol={"BTC/USDT": 20_000.0})
+    assert not rule.check(intent, state).allowed
+
+
+def test_max_gross_exposure_pct_allows_sell():
+    rule = MaxGrossExposurePct(max_pct=0.50)
+    sell_intent = Intent(
+        strategy_id="test", symbol="BTC/USDT", side=Side.SELL,
+        qty=Decimal("0.01"), order_type=OrderType.MARKET,
+        stop_price=None, reason="test",
+    )
+    assert rule.check(sell_intent, _state()).allowed
 
 
 # Silence the unused-import warning for datetime/timezone if they were removed.

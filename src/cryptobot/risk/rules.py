@@ -8,7 +8,7 @@ state; they return a verdict.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from cryptobot.core.types import Intent, Side
@@ -38,6 +38,10 @@ class RiskState:
     `consecutive_losses` is incremented by the run loop after each losing fill
     and reset to 0 after `cooldown_bars` bars have elapsed. CooldownAfterLoss
     reads it; the run loop writes it.
+
+    `mark_price_by_symbol` maps symbol → current mark price (float). The run
+    loop populates this before calling risk.evaluate so that position-size
+    rules can compute notional values without accessing broker state.
     """
 
     equity: float
@@ -46,6 +50,7 @@ class RiskState:
     orders_this_minute: int
     open_intents_by_symbol: dict[str, int]
     consecutive_losses: int = 0
+    mark_price_by_symbol: dict[str, float] = field(default_factory=dict)
 
 
 class RiskRule(ABC):
@@ -180,5 +185,69 @@ class CooldownAfterLoss(RiskRule):
             return Verdict.deny(
                 f"cooldown active: {state.consecutive_losses} consecutive losses "
                 f">= threshold {self._threshold}"
+            )
+        return Verdict.allow()
+
+
+class MaxPositionSizePct(RiskRule):
+    """Deny a BUY intent whose notional value exceeds a fraction of equity.
+
+    notional = intent.qty * mark_price_by_symbol[symbol].
+    If the symbol has no mark price in state, the intent is denied (cannot
+    validate).
+    Exits (SELL) are always allowed.
+    """
+
+    name = "max_position_size_pct"
+
+    def __init__(self, max_pct: float) -> None:
+        self._max_pct = max_pct
+
+    def check(self, intent: Intent, state: RiskState) -> Verdict:
+        if intent.side == Side.SELL:
+            return Verdict.allow()
+        price = state.mark_price_by_symbol.get(intent.symbol)
+        if price is None:
+            return Verdict.deny(
+                f"no mark price for {intent.symbol} — cannot validate position size"
+            )
+        if state.equity <= 0:
+            return Verdict.deny("non-positive equity")
+        notional = float(intent.qty) * price
+        ratio = notional / state.equity
+        if ratio > self._max_pct:
+            return Verdict.deny(
+                f"position size {ratio:.4f} exceeds cap {self._max_pct:.4f}"
+            )
+        return Verdict.allow()
+
+
+class MaxGrossExposurePct(RiskRule):
+    """Deny a BUY intent that would push total gross exposure over a cap.
+
+    projected_exposure = current gross_exposure + intent notional.
+    Exits (SELL) are always allowed.
+    """
+
+    name = "max_gross_exposure_pct"
+
+    def __init__(self, max_pct: float) -> None:
+        self._max_pct = max_pct
+
+    def check(self, intent: Intent, state: RiskState) -> Verdict:
+        if intent.side == Side.SELL:
+            return Verdict.allow()
+        price = state.mark_price_by_symbol.get(intent.symbol)
+        if price is None:
+            return Verdict.deny(
+                f"no mark price for {intent.symbol} — cannot validate gross exposure"
+            )
+        if state.equity <= 0:
+            return Verdict.deny("non-positive equity")
+        notional = float(intent.qty) * price
+        projected = (state.gross_exposure + notional) / state.equity
+        if projected > self._max_pct:
+            return Verdict.deny(
+                f"projected gross exposure {projected:.4f} exceeds cap {self._max_pct:.4f}"
             )
         return Verdict.allow()
