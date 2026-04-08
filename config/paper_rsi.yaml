@@ -1,0 +1,45 @@
+# RSI mean-reversion strategy — paper trading config.
+# Materially different from SMA crossover: buys when RSI is oversold (price has
+# dropped hard), sells when RSI is overbought. Works best in ranging markets;
+# underperforms in strong trends. Use alongside paper_fast.yaml to compare
+# trend-following vs mean-reversion behavior on the same market data.
+
+mode: paper
+
+market:
+  symbols:
+    - BTC/USDT
+  timeframe: 5m
+
+strategy:
+  name: rsi
+  params:
+    window: 14                  # RSI lookback period
+    oversold: 30.0              # RSI below this → bullish signal
+    overbought: 70.0            # RSI above this → bearish signal
+    atr_window: 14              # ATR window for stop-loss sizing
+    risk_per_trade_pct: 0.005   # 0.5% of equity risked per trade
+    stop_distance_multiplier: 1.5  # stop placed 1.5× ATR below entry
+    buy_threshold: 0.30         # minimum score to trigger BUY intent
+    sell_threshold: -0.30       # maximum score to trigger SELL intent
+
+risk:
+  max_position_pct: 0.05
+  max_gross_exposure_pct: 0.25
+  max_daily_loss_pct: 0.01
+  max_orders_per_minute: 5
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+  max_open_positions: 1
+  cooldown_after_losses: 3
+  cooldown_bars: 4
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 30          # RSI(14) + ATR(14) both need ~15 bars; 30 gives a clean buffer
+poll_interval_seconds: 30.0
