@@ -50,6 +50,7 @@ from cryptobot.core.types import (
 )
 from cryptobot.core.types import BarGapError
 from cryptobot.data.feed import MarketDataFeed
+from cryptobot.data.storage import BarStore
 from cryptobot.exchanges.ccxt_client import CcxtClient
 from cryptobot.execution.fees import FeeModel
 from cryptobot.execution.paper_broker import PaperBroker
@@ -174,12 +175,14 @@ def main(config_path: str | Path) -> str:
         api_secret=settings.env.exchange_api_secret,
         testnet=settings.env.exchange_testnet,
     )
+    bar_store = BarStore(settings.env.data_dir)
     feed = MarketDataFeed(
         client,
         mc.symbols,
         mc.timeframe,
         warmup_bars=settings.run.warmup_bars,
         poll_interval_seconds=settings.run.poll_interval_seconds,
+        bar_store=bar_store,
     )
 
     # --- Per-run loop state --------------------------------------------------

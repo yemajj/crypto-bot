@@ -8,6 +8,12 @@ The feed has two phases:
    fetches the most recent few bars and yields any that have not been seen
    before (deduplication by ts_open).
 
+When a BarStore is provided the feed caches bars locally in parquet files,
+so restarts only fetch the bars that are missing from the cache — typically
+a handful rather than the full warmup window. The BarStore is optional;
+omitting it restores the original behaviour of fetching everything from the
+exchange on every startup.
+
 Assumptions:
 - All bars yielded are closed (the open bar is filtered out by CcxtClient).
 - The `seen` set is in-memory; if the process restarts, warm-up bars will be
@@ -35,6 +41,9 @@ log = get_logger(component="feed")
 # at a 60-second poll interval (at most 1 new bar per poll for 1h+ timeframes).
 _POLL_FETCH_LIMIT = 3
 
+# Max bars to fetch in a single gap-fill request when the cache is stale.
+_GAP_FETCH_LIMIT = 500
+
 
 class MarketDataFeed:
     """Polls a single exchange client and yields new closed bars as they appear."""
@@ -46,12 +55,14 @@ class MarketDataFeed:
         timeframe: str,
         warmup_bars: int = 200,
         poll_interval_seconds: float = 60.0,
+        bar_store=None,  # BarStore | None — avoids circular import at type level
     ) -> None:
         self._client = client
         self._symbols = symbols
         self._timeframe = timeframe
         self._warmup_bars = warmup_bars
         self._poll_interval = poll_interval_seconds
+        self._bar_store = bar_store
 
     def stream(self) -> Iterator[Bar]:
         """Yield bars indefinitely: warm-up first, then live polling.
@@ -70,11 +81,9 @@ class MarketDataFeed:
                 symbol=symbol,
                 timeframe=self._timeframe,
                 bars=self._warmup_bars,
+                cached=self._bar_store is not None,
             )
-            initial = self._client.fetch_ohlcv(
-                symbol, self._timeframe, limit=self._warmup_bars
-            )
-            # fetch_ohlcv already checked intra-batch contiguity.
+            initial = self._warmup_bars_for(symbol)
             for bar in initial:
                 seen[symbol].add(bar.ts_open)
                 last_ts[symbol] = bar.ts_open
@@ -101,6 +110,7 @@ class MarketDataFeed:
                     )
                     continue
 
+                new_bars: list[Bar] = []
                 for bar in recent:
                     if bar.ts_open not in seen[symbol]:
                         # Cross-batch contiguity check.
@@ -116,6 +126,7 @@ class MarketDataFeed:
                                 )
                         seen[symbol].add(bar.ts_open)
                         last_ts[symbol] = bar.ts_open
+                        new_bars.append(bar)
                         log.info(
                             "feed_new_bar",
                             symbol=symbol,
@@ -123,3 +134,72 @@ class MarketDataFeed:
                             close=float(bar.close),
                         )
                         yield bar
+
+                if new_bars and self._bar_store is not None:
+                    try:
+                        self._bar_store.write(symbol, self._timeframe, new_bars)
+                    except Exception as exc:
+                        log.warning("bar_store_poll_write_error", error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _warmup_bars_for(self, symbol: str) -> list[Bar]:
+        """Return `warmup_bars` bars for a symbol, using the cache when possible.
+
+        Without cache: fetches `warmup_bars` from the exchange (original behaviour).
+        With cache:
+          1. Read cached bars.
+          2. Fetch only the gap (bars since last cached ts) from the exchange.
+          3. Merge gap bars into the cache.
+          4. Return the last `warmup_bars` from the combined set.
+        """
+        if self._bar_store is None:
+            return self._client.fetch_ohlcv(
+                symbol, self._timeframe, limit=self._warmup_bars
+            )
+
+        bar_td = timedelta(seconds=timeframe_to_seconds(self._timeframe))
+        cached = self._bar_store.read(symbol, self._timeframe)
+
+        if not cached:
+            # Cold start: fetch and prime the cache.
+            fetched = self._client.fetch_ohlcv(
+                symbol, self._timeframe, limit=self._warmup_bars
+            )
+            if fetched:
+                try:
+                    self._bar_store.write(symbol, self._timeframe, fetched)
+                except Exception as exc:
+                    log.warning("bar_store_warmup_write_error", error=str(exc))
+            log.info("feed_cache_cold_start", symbol=symbol, n_fetched=len(fetched))
+            return fetched
+
+        # Warm start: fetch only the gap since the last cached bar.
+        last_cached_ts = cached[-1].ts_open
+        since = last_cached_ts + bar_td
+        try:
+            gap_bars = self._client.fetch_ohlcv(
+                symbol, self._timeframe, since=since, limit=_GAP_FETCH_LIMIT
+            )
+        except Exception as exc:
+            # Network error during gap fill — fall back to the cache as-is.
+            log.warning("bar_store_gap_fill_error", symbol=symbol, error=str(exc))
+            gap_bars = []
+
+        if gap_bars:
+            try:
+                self._bar_store.write(symbol, self._timeframe, gap_bars)
+                cached = self._bar_store.read(symbol, self._timeframe)
+            except Exception as exc:
+                log.warning("bar_store_gap_write_error", error=str(exc))
+                cached = cached + gap_bars
+
+        log.info(
+            "feed_cache_warm_start",
+            symbol=symbol,
+            cached=len(cached),
+            gap_fetched=len(gap_bars),
+        )
+        return cached[-self._warmup_bars:] if len(cached) > self._warmup_bars else cached
