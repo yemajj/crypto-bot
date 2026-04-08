@@ -2,10 +2,11 @@
 
 A safety-first, modular crypto trading framework for a solo builder.
 
-> **Status: Phase 5 complete.** Backtesting, paper trading, analytics reporting,
-> Telegram notifications, and bar caching are fully implemented. Live trading is
-> intentionally **not** implemented and will only be introduced after weeks of
-> validated paper trading, with tiny notional caps. This is **not** a money printer.
+> **Status: Phases 1–5 complete.** Backtesting, paper trading, analytics reporting,
+> Telegram notifications, bar caching, and historical data ingestion are fully
+> implemented. Live trading is intentionally **not** implemented and will only be
+> introduced after weeks of validated paper trading, with tiny notional caps.
+> This is **not** a money printer.
 
 ---
 
@@ -145,7 +146,7 @@ written to YAML or to logs.
 | Phase | Goal                                | Status |
 |-------|-------------------------------------|--------|
 | 1     | Scaffold + config + logging         | **complete** |
-| 2     | Market data ingestion + persistence | **complete** (BarStore parquet cache, gap detection) |
+| 2     | Market data ingestion + persistence | **complete** (BarStore parquet cache, gap detection, paginated `fetch-history`) |
 | 3     | Strategy engine + backtest          | **complete** |
 | 4     | Paper trading                       | **complete** |
 | 5     | Risk controls + monitoring          | **complete** (Telegram alerts, equity snapshots, analytics reporting, pre-live checklist) |

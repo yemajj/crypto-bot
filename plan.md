@@ -1,7 +1,7 @@
 # cryptobot — Development Plan
 
 > Last updated: 2026-04-08  
-> Current phase: **Phase 5 — Risk controls + monitoring (in progress)**
+> Current phase: **Phases 1–5 complete. Discussing Phase 7 (additional strategies).**
 
 ---
 
@@ -33,20 +33,18 @@
 
 ---
 
-## Phase 2 — Market data ingestion + persistence ⚠️ PARTIAL
+## Phase 2 — Market data ingestion + persistence ✅ COMPLETE
 
 **Goal:** Reliable historical bar fetching and local caching so backtests don't hit the exchange every run.
 
 **Delivered:**
-- `exchanges/ccxt_client.py` — `CcxtClient.fetch_ohlcv` (deferred ccxt import, filters incomplete bars, intra-batch gap detection, raises `BarGapError`)
+- `exchanges/ccxt_client.py` — `CcxtClient.fetch_ohlcv` (deferred ccxt import, filters incomplete bars, intra-batch gap detection, raises `BarGapError`; supports `since=` for pagination)
 - `exchanges/ccxt_client.py` — `CcxtClient.fetch_ticker`
 - `exchanges/base.py` — `ExchangeClient` ABC
-- `data/loader.py` — CSV loader for backtesting
-
-**Still TODO:**
-- `BarStore.write` / `BarStore.read` — persist bars to parquet, dedupe on `ts_open`, merge with existing file
-- CCXT pagination for fetches spanning > 500 bars (exchange limit)
-- `cryptobot fetch` CLI command to pre-populate the bar cache
+- `data/storage.py` — `BarStore`: parquet-backed cache, atomic writes via `os.replace()`, dedup on `ts_open`, sorted ascending; `read()` returns `list[Bar]`
+- `data/loader.py` — `HistoricalLoader.fetch()`: paginated CCXT fetch → BarStore, gap-skip-and-continue, `until` boundary, idempotent (dedup handled by BarStore); injectable `batch_size` for testing
+- `data/feed.py` — `MarketDataFeed` warm-start: reads cache, fetches only gap bars from exchange on restart
+- `cli.py` — `cryptobot fetch-history --symbol --timeframe --since [--until]`
 
 ---
 
@@ -80,30 +78,19 @@
 
 ---
 
-## Phase 5 — Risk controls + monitoring 🔄 IN PROGRESS
+## Phase 5 — Risk controls + monitoring ✅ COMPLETE
 
 **Goal:** Make paper trading operationally reliable and observable before considering live trading.
 
-### Pre-phase fixes ✅ All complete (2026-04-08)
-
-| ID | Item | Commit |
-|----|------|--------|
-| C1 | `PaperBroker.check_stops` — stop-loss monitoring actually fires | `c3ab677` |
-| C2 | Market SELL with no holdings → `REJECTED` (not zero-qty fill) | `493be8b` |
-| M1 | Rate-limit tracking gated on `FILLED\|ACCEPTED` only | `e099e8e` |
-| H1 | `MaxPositionSizePct` + `MaxGrossExposurePct` rules wired | `57c8355` |
-| H2 | `BarGapError` on gap in `CcxtClient.fetch_ohlcv` + cross-batch gap in `MarketDataFeed` | `4db39b0` |
-
-### Remaining Phase 5 work
-
-**5a — Telegram notifications**
-- [ ] Implement `Notifier.send()` in `monitoring/notify.py` — POST to Telegram Bot API when `bot_token` + `chat_id` are set; no-op (log only) when not configured
-- [ ] Wire into `run_paper.py`: notify on trade fill, stop trigger, daily loss limit hit, kill switch, bar gap halt, run start/end
-- [ ] Config: `telegram_bot_token` and `telegram_chat_id` already in `EnvSettings`; no YAML changes needed
-
-**5b — Deferred MEDIUM items** *(confirm scope with user before starting)*
-- [ ] M3: Synthetic-bar timestamp correction in `MarketDataFeed` (currently uses `bar.ts_open` as fill time, which is the bar open not close)
-- [ ] M4: Day-start equity drift — daily PnL resets on calendar day but equity may drift if a position is open over midnight
+**Delivered:**
+- All pre-phase fixes (C1–H2) shipped 2026-04-08
+- `monitoring/notify.py` — `Notifier`: real Telegram HTTP via `urllib`, no-op when unconfigured, swallows network errors
+- `run_paper.py` — notifications on: run start/end, every fill (BUY/SELL), stop-loss trigger, daily loss cap denial
+- `journal/models.py` — `EquitySnapshotRow` table (run_id, bar_ts, equity, cash)
+- `journal/writer.py` — `record_equity_snapshot()` (paper, one row/bar) + `record_equity_snapshots_bulk()` (backtest, one transaction)
+- `analytics/queries.py` — DB query layer: `get_equity_curve()`, `reconstruct_trades()` (FIFO), `daily_summary()`, `symbol_breakdown()`, `fee_impact()`
+- `analytics/report.py` — full text report using DB equity snapshots for accurate Sharpe/drawdown; pre-live checklist (Sharpe > 1.0, DD < 20%, ≥30 trades, win rate > 40%, fees < 15% gross)
+- `cli.py` — `cryptobot report [--run-id] [--list]`
 
 ---
 
@@ -128,16 +115,23 @@
 
 ---
 
-## Phase 7 — Analytics + iteration 🔒 NOT STARTED
+## Phase 7 — Additional strategies + iteration 🔄 IN DISCUSSION
 
-**Goal:** Make it easy to compare runs, spot regressions, and tune strategy parameters.
+**Goal:** Add a second (and possibly third) strategy to enable A/B comparison in backtest and diversification in paper trading.
 
-**Planned work:**
-- `analytics/report.py` — implement `build_report`: read journal, compute per-run PnL, drawdown, Sharpe, win rate, exposure
-- `cryptobot report <run_id>` CLI command
-- Per-symbol breakdown in reports
-- Simple CSV export of fills for external analysis
-- Walk-forward backtest utility (run backtest over rolling windows)
+**Candidates under discussion (to be decided with user):**
+- RSI mean-reversion: buy oversold (RSI < 30), sell overbought (RSI > 70) — counter-trend, complements SMA crossover
+- Donchian channel breakout: buy on N-bar high breakout, stop below N-bar low — trend-following but faster than SMA
+- Bollinger Band squeeze: trade the volatility expansion after a compression period — event-driven
+
+**What adding a strategy requires:**
+- New file in `strategy/` implementing `Strategy.on_bar(ctx) -> list[Intent]`
+- Register in `strategy/registry.py`
+- New section in `config/backtest.yaml` (or a separate config file per strategy)
+- Tests mirroring `tests/test_sma_crossover.py`
+
+**Also planned:**
+- Walk-forward backtest utility: split data into in-sample / out-of-sample windows, run backtest over each, compare metrics
 
 ---
 
@@ -178,11 +172,19 @@ uv pip install -e ".[dev]"
 # tests
 pytest
 
-# backtest
+# pre-populate bar cache (run once before backtest/paper)
+cryptobot fetch-history --symbol BTC/USDT --timeframe 1h --since 2024-01-01
+
+# backtest (against cached bars or a CSV)
 cryptobot backtest --config config/backtest.yaml --data path/to/ohlcv.csv
 
 # paper trading
 cryptobot paper --config config/paper.yaml
+
+# performance report
+cryptobot report                         # latest run
+cryptobot report --run-id bt_abc123     # specific run
+cryptobot report --list                 # all runs
 
 # live (intentionally disabled until Phase 6)
 cryptobot live   # raises LiveTradingDisabled
