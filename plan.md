@@ -1,7 +1,7 @@
 # cryptobot — Development Plan
 
 > Last updated: 2026-04-08  
-> Current phase: **Phases 1–5 complete. Discussing Phase 7 (additional strategies).**
+> Current phase: **Phases 1–5 complete. Phase 7 (ensemble strategy system) planned and ready for implementation.**
 
 ---
 
@@ -115,22 +115,63 @@
 
 ---
 
-## Phase 7 — Additional strategies + iteration 🔄 IN DISCUSSION
+## Phase 7 — Ensemble strategy system 🔄 PLANNED
 
-**Goal:** Add a second (and possibly third) strategy to enable A/B comparison in backtest and diversification in paper trading.
+**Goal:** Add RSI, Donchian, and Bollinger strategies plus a weighted ensemble that composes
+them with regime-aware scoring — while leaving the existing SMA crossover and all run loops
+completely unchanged.
 
-**Candidates under discussion (to be decided with user):**
-- RSI mean-reversion: buy oversold (RSI < 30), sell overbought (RSI > 70) — counter-trend, complements SMA crossover
-- Donchian channel breakout: buy on N-bar high breakout, stop below N-bar low — trend-following but faster than SMA
-- Bollinger Band squeeze: trade the volatility expansion after a compression period — event-driven
+**Design decisions (locked):**
+- `sma_crossover.py` is not modified. The ensemble maps its `on_bar` intents to ±1.0 scores.
+- Volume is a confidence multiplier (±25% adjustment to final score), not a directional bucket.
+- 4 directional buckets: trend, momentum, breakout, volatility.
+- Agreement filter: a bucket counts only if `abs(score) ≥ 0.25` and direction matches.
+- Bollinger is expansion-confirmation in v1 (silent during compression); designed for future squeeze-detection upgrade.
+- Regime weights re-normalize dynamically across only configured buckets.
+- `stop_distance_multiplier` is configurable (default 1.5).
 
-**What adding a strategy requires:**
-- New file in `strategy/` implementing `Strategy.on_bar(ctx) -> list[Intent]`
-- Register in `strategy/registry.py`
-- New section in `config/backtest.yaml` (or a separate config file per strategy)
-- Tests mirroring `tests/test_sma_crossover.py`
+**New files:**
 
-**Also planned:**
+| File | Purpose |
+|---|---|
+| `strategy/base.py` | Add `ScoringStrategy` ABC + `_compute_atr` helper |
+| `strategy/rsi.py` | RSI momentum scorer (bucket: momentum) |
+| `strategy/donchian.py` | Donchian breakout scorer (bucket: breakout) |
+| `strategy/bollinger.py` | Bollinger expansion-confirmation scorer (bucket: volatility) |
+| `strategy/volume_signal.py` | Volume confidence multiplier (not a directional bucket) |
+| `strategy/regime_detector.py` | Pure `detect_regime(bars) -> Regime` (trending/ranging/breakout_watch) |
+| `strategy/signal_aggregator.py` | 4-bucket weighted aggregator + volume multiplier + agreement filter |
+| `strategy/ensemble.py` | `EnsembleStrategy` registered as `"ensemble"` |
+| `config/ensemble.yaml` | Runnable ensemble config (paper mode, BTC/USDT 1h) |
+| `tests/test_rsi.py` | RSI scorer tests |
+| `tests/test_donchian.py` | Donchian scorer tests |
+| `tests/test_bollinger.py` | Bollinger scorer tests |
+| `tests/test_volume_signal.py` | Volume multiplier tests |
+| `tests/test_regime_detector.py` | Regime detection tests |
+| `tests/test_signal_aggregator.py` | Aggregation, weighting, agreement filter tests |
+| `tests/test_ensemble.py` | End-to-end ensemble tests incl. SMA mapping and params isolation |
+
+**Backward compatibility guarantees:**
+- `cryptobot backtest --config config/backtest.yaml` — unchanged
+- `cryptobot paper --config config/paper.yaml` — unchanged
+- All existing tests pass without modification
+- `get_strategy("sma_crossover")` continues to work; new names added alongside
+
+**Ensemble architecture:**
+
+```
+Strategy (ABC)
+  └─ ScoringStrategy (ABC)    ← new in base.py
+       ├─ RsiStrategy          ← new
+       ├─ DonchianStrategy     ← new
+       ├─ BollingerStrategy    ← new
+       └─ VolumeSignalStrategy ← new (used as multiplier, not bucket)
+
+SmaCrossover                   ← UNCHANGED
+EnsembleStrategy(Strategy)     ← new; wraps sub-strategies via config
+```
+
+**Also planned (post-ensemble):**
 - Walk-forward backtest utility: split data into in-sample / out-of-sample windows, run backtest over each, compare metrics
 
 ---
