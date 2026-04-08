@@ -57,12 +57,14 @@ from cryptobot.journal.writer import (
     build_engine,
     init_db,
     make_session_factory,
+    record_equity_snapshot,
     record_fill,
     record_order,
     record_run_end,
     record_run_start,
     record_signal,
 )
+from cryptobot.monitoring.notify import Notifier
 from cryptobot.monitoring.logging_setup import setup_logging
 from cryptobot.risk.manager import RiskManager
 from cryptobot.risk.rules import (
@@ -116,6 +118,19 @@ def main(config_path: str | Path) -> str:
         run_id=run_id,
         mode="paper",
         strategy_name=settings.run.strategy.name,
+        notes=f"starting_cash={settings.run.starting_cash:.2f}",
+    )
+
+    notifier = Notifier(
+        bot_token=settings.env.telegram_bot_token,
+        chat_id=settings.env.telegram_chat_id,
+    )
+    notifier.send(
+        f"<b>Paper run started</b>\n"
+        f"run_id: <code>{run_id}</code>\n"
+        f"strategy: {settings.run.strategy.name}\n"
+        f"symbols: {', '.join(settings.run.market.symbols)}\n"
+        f"cash: ${settings.run.starting_cash:,.2f}"
     )
 
     # --- Build components ----------------------------------------------------
@@ -206,6 +221,11 @@ def main(config_path: str | Path) -> str:
             for fill in stop_fills:
                 if warmup_remaining <= 0:
                     record_fill(session_factory, fill)
+                    notifier.send(
+                        f"<b>Stop-loss triggered</b> {symbol}\n"
+                        f"exit price: {float(fill.price):,.4f}  qty: {float(fill.qty):.6f}\n"
+                        f"fee: {float(fill.fee):.4f}  equity: ${broker.equity():,.2f}"
+                    )
                 _process_sell_fill(
                     fill, symbol, entry_avg_prices,
                     consecutive_losses, cooldown_remaining,
@@ -241,6 +261,11 @@ def main(config_path: str | Path) -> str:
                 cash=round(broker.cash, 2),
                 warmup=warmup_remaining > 0,
             )
+
+            if warmup_remaining <= 0:
+                record_equity_snapshot(
+                    session_factory, run_id, bar.ts_open, equity, broker.cash
+                )
 
             # Skip order submission during warm-up.
             if warmup_remaining > 0:
@@ -292,6 +317,12 @@ def main(config_path: str | Path) -> str:
                         side=intent.side.value,
                         reason=decision.verdict.reason,
                     )
+                    if "daily" in decision.verdict.reason.lower():
+                        notifier.send(
+                            f"<b>Daily loss cap hit</b> {symbol}\n"
+                            f"daily PnL: ${risk_state.daily_pnl:,.2f}  equity: ${equity:,.2f}\n"
+                            f"reason: {decision.verdict.reason}"
+                        )
                     continue
 
                 # Journal signal.
@@ -356,6 +387,11 @@ def main(config_path: str | Path) -> str:
                             qty=float(fill.qty),
                             fee=float(fill.fee),
                         )
+                        notifier.send(
+                            f"<b>Fill</b> {intent.side.value} {symbol}\n"
+                            f"price: {float(fill.price):,.4f}  qty: {float(fill.qty):.6f}\n"
+                            f"fee: {float(fill.fee):.4f}  equity: ${broker.equity():,.2f}"
+                        )
                         if intent.side == Side.SELL and pos_before_fill:
                             _process_sell_fill(
                                 fill, symbol, entry_avg_prices,
@@ -378,11 +414,17 @@ def main(config_path: str | Path) -> str:
 
     finally:
         final_equity = broker.equity()
+        pnl = final_equity - settings.run.starting_cash
         log.info("paper_stopped", run_id=run_id, final_equity=round(final_equity, 2))
         record_run_end(
             session_factory,
             run_id=run_id,
             notes=f"final_equity={final_equity:.2f}",
+        )
+        notifier.send(
+            f"<b>Paper run stopped</b>\n"
+            f"run_id: <code>{run_id}</code>\n"
+            f"final equity: ${final_equity:,.2f}  PnL: ${pnl:+,.2f}"
         )
 
     return run_id
