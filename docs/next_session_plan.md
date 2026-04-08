@@ -107,21 +107,13 @@ n_bars_held=0,  # TODO: derive from fill timestamps + timeframe once timeframe i
 
 ---
 
-### 4. Reconcile README and plan.md Status Wording
+### 4. Verify README and plan.md Status Wording Are Consistent
 
 **Priority: Low** — housekeeping, prevents confusion when sharing with others.
 
-**Issue:** The README roadmap table and `plan.md` may overstate or inconsistently describe
-completion status for Phases 5 and 7. Phase 7 row in the README previously read "Analytics +
-iteration" (that work shipped in Phase 5). These should be aligned so someone reading either
-file gets the same picture.
-
-**Files to check and update as needed:**
-- `README.md` — roadmap table phase descriptions and status markers
-- `plan.md` — phase headers and status markers
-
-**Rule:** Only mark a phase complete if all planned deliverables listed in `plan.md` are
-actually implemented. If a phase is partial, say so.
+Read `README.md` and `plan.md` side-by-side and check that phase descriptions and completion
+markers agree. Adjust only if there is an actual discrepancy — no edits needed if they already
+match.
 
 ---
 
