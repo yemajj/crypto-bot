@@ -20,9 +20,10 @@ strategy:
     slow: 15
     risk_per_trade_pct: 0.005
     atr_window: 14
+    max_position_notional_pct: 0.08  # cap each position at 8% of equity; 3×8%=24% fits under gross cap
 
 risk:
-  max_position_pct: 0.05
+  max_position_pct: 0.08            # raised to match strategy notional cap above
   max_gross_exposure_pct: 0.25
   max_daily_loss_pct: 0.05          # was 0.01 — don't let one bad trade freeze the session
   max_orders_per_minute: 15         # was 5 — headroom for multi-symbol signal bursts
