@@ -48,12 +48,13 @@ def _atr(bars: list, window: int) -> float:
     return sum(true_ranges) / len(true_ranges)
 
 
-def _parse_params(params: dict[str, Any]) -> tuple[int, int, int, float]:
+def _parse_params(params: dict[str, Any]) -> tuple[int, int, int, float, float]:
     fast = int(params.get("fast", 20))
     slow = int(params.get("slow", 50))
     atr_window = int(params.get("atr_window", 14))
     risk_pct = float(params.get("risk_per_trade_pct", 0.005))
-    return fast, slow, atr_window, risk_pct
+    max_notional_pct = float(params.get("max_position_notional_pct", 1.0))
+    return fast, slow, atr_window, risk_pct, max_notional_pct
 
 
 @register_strategy("sma_crossover")
@@ -63,7 +64,7 @@ class SmaCrossover(Strategy):
     name = "sma_crossover"
 
     def on_bar(self, ctx: StrategyContext) -> list[Intent]:
-        fast, slow, atr_window, risk_pct = _parse_params(ctx.params)
+        fast, slow, atr_window, risk_pct, max_notional_pct = _parse_params(ctx.params)
 
         # Need enough history: slow SMA needs `slow` bars, plus one prior bar
         # for crossover detection, plus `atr_window + 1` bars for ATR.
@@ -93,6 +94,13 @@ class SmaCrossover(Strategy):
             stop_distance = 2.0 * atr          # quote-currency distance
             risk_dollars = ctx.equity * risk_pct
             qty_float = risk_dollars / stop_distance  # base-currency units
+
+            # Cap notional to max_position_notional_pct of equity so that
+            # high-price assets (e.g. BTC) don't produce oversized positions
+            # when ATR is large relative to the risk budget.
+            max_qty_float = (ctx.equity * max_notional_pct) / close
+            qty_float = min(qty_float, max_qty_float)
+
             qty = Decimal(str(math.floor(qty_float * 1e5) / 1e5))  # floor to 5 decimals
 
             if qty < _MIN_QTY:
