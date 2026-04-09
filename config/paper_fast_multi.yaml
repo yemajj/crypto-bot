@@ -1,0 +1,45 @@
+# Testing-only paper config — SMA(5,15) on BTC/USDT + ETH/USDT + SOL/USDT.
+# Purpose: test multi-symbol trade volume. Three symbols give ~3× the signal
+# rate vs single-symbol at the same timeframe. Loosened circuit breakers so
+# the session isn't killed by a single bad trade.
+# NOT for production paper trading — tight caps must be restored before Phase 5 sign-off.
+
+mode: paper
+
+market:
+  symbols:
+    - BTC/USDT
+    - ETH/USDT
+    - SOL/USDT
+  timeframe: 5m
+
+strategy:
+  name: sma_crossover
+  params:
+    fast: 5
+    slow: 15
+    risk_per_trade_pct: 0.005
+    atr_window: 14
+
+risk:
+  max_position_pct: 0.05
+  max_gross_exposure_pct: 0.25
+  max_daily_loss_pct: 0.05          # was 0.01 — don't let one bad trade freeze the session
+  max_orders_per_minute: 15         # was 5 — headroom for multi-symbol signal bursts
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+    - ETH/USDT
+    - SOL/USDT
+  max_open_positions: 3             # one per symbol
+  cooldown_after_losses: 5          # was 3 — less aggressive loss-streak pause
+  cooldown_bars: 2                  # was 4 — shorter pause when it does trigger
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 30
+poll_interval_seconds: 30.0
