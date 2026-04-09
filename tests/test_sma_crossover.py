@@ -200,3 +200,49 @@ def test_qty_scales_with_equity():
 def test_strategy_registered():
     cls = get_strategy("sma_crossover")
     assert cls.name == "sma_crossover"
+
+
+def test_notional_cap_clips_qty_when_atr_sizing_would_exceed_cap():
+    """When ATR-derived qty × close > equity × max_position_notional_pct, qty is clamped.
+
+    With closes=[100,100,100,100,50,50,50,200] and equity=10_000:
+      ATR≈50.1 → stop_distance≈100.3 → uncapped qty≈0.997
+      max_position_notional_pct=0.001 → max_qty = (10000*0.001)/200 = 0.05
+      cap bites: result qty = 0.05, notional = 0.05 * 200 = 10.0 ≤ 10.0
+    """
+    strat = _strategy()
+    closes = [100, 100, 100, 100, 50, 50, 50, 200]
+    bars = [_bar(c, i) for i, c in enumerate(closes)]
+    capped_params = {**_PARAMS, "max_position_notional_pct": 0.001}
+    ctx = StrategyContext(
+        symbol=_SYMBOL,
+        history=bars,
+        position=_flat_position(),
+        equity=10_000.0,
+        params=capped_params,
+    )
+    intents = strat.on_bar(ctx)
+    assert len(intents) == 1
+    close = float(bars[-1].close)
+    # Notional must not exceed the cap
+    assert float(intents[0].qty) * close <= 10_000.0 * 0.001
+
+
+def test_notional_cap_is_noop_when_cap_is_1():
+    """max_position_notional_pct=1.0 is a no-op — qty equals the uncapped ATR result."""
+    strat = _strategy()
+    closes = [100, 100, 100, 100, 50, 50, 50, 200]
+    bars = [_bar(c, i) for i, c in enumerate(closes)]
+
+    uncapped = strat.on_bar(_ctx(bars, equity=10_000.0))  # _PARAMS has no notional cap key
+    capped_ctx = StrategyContext(
+        symbol=_SYMBOL,
+        history=bars,
+        position=_flat_position(),
+        equity=10_000.0,
+        params={**_PARAMS, "max_position_notional_pct": 1.0},
+    )
+    capped = strat.on_bar(capped_ctx)
+
+    assert len(uncapped) == 1 and len(capped) == 1
+    assert capped[0].qty == uncapped[0].qty
