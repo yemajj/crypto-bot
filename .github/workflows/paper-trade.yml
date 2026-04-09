@@ -47,7 +47,7 @@ jobs:
         run: |
           cat <<EOF > .env
           CRYPTOBOT_ENV=paper
-          CRYPTOBOT_LOG_LEVEL=INFO
+          CRYPTOBOT_LOG_LEVEL=DEBUG
           EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME }}
           EXCHANGE_API_KEY=
           EXCHANGE_API_SECRET=
