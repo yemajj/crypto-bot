@@ -280,7 +280,7 @@ def main(config_path: str | Path) -> str:
                 close=float(bar.close),
                 equity=round(equity, 2),
                 cash=round(broker.cash, 2),
-                warmup=warmup_remaining > 0,
+                warmup=warmup_remaining[symbol] > 0,
             )
 
             if warmup_remaining[symbol] <= 0:
