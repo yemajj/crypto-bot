@@ -165,6 +165,10 @@ Use `config/paper_validation.yaml` for long-running validation runs that count t
 # preload validation data
 cryptobot fetch-history --symbol BTC/USDT --timeframe 5m --since 2024-01-01
 
+# (optional) export cached bars to CSV for backtesting against the same data
+cryptobot export-history --symbol BTC/USDT --timeframe 5m
+cryptobot backtest --config config/backtest_paper_5m.yaml --data data/BTC_USDT_5m.csv
+
 # start a validation run
 cryptobot paper --config config/paper_validation.yaml
 

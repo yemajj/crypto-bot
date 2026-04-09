@@ -1,6 +1,6 @@
 # cryptobot — Development Plan
 
-> Last updated: 2026-04-08 (session 2)
+> Last updated: 2026-04-09 (session 3)
 > Current phase: **Phases 1–5 and Phase 7 complete. Phase 6 (live trading) gated on weeks of paper trading validation.**
 
 ---
@@ -93,6 +93,28 @@
 - `analytics/validation.py` — multi-run validation summary for completed tagged paper runs
 - `cli.py` — `cryptobot report [--run-id] [--list]` and `cryptobot validate-paper [--days N] [--run-id ...]`
 - `config/paper_validation.yaml` + `docs/paper_validation.md` — standard validation profile and runbook
+
+---
+
+## Session 3 additions (2026-04-09)
+
+**Historical replay workflow:**
+- `cli.py` — `cryptobot export-history` exports cached parquet OHLCV to a backtest-ready CSV
+- `config/backtest_paper_5m.yaml` — backtest config aligned with paper.yaml (BTC/USDT 5m)
+- `app/run_backtest.py` — now reads `starting_cash` from config YAML instead of hardcoded 10000
+
+**Automated paper trading CI:**
+- `.github/workflows/paper-trade.yml` — GitHub Actions workflow; dispatch-triggered; fetches 5m history, runs paper session, uploads logs + SQLite as artifacts
+- `config/paper_fast_multi.yaml` — multi-symbol stress test config (BTC/USDT, ETH/USDT, SOL/USDT)
+- `docs/paper_trading_activity_recommendations.md` — ranked recommendations to increase trade volume for faster iteration
+
+**Bug fixes:**
+- `strategy/sma_crossover.py` — added `max_position_notional_pct` param (default 1.0 = no cap) to prevent ATR sizing from producing oversized positions on high-price assets; validated in `StrategyConfig`
+- `app/run_paper.py` — fixed `warmup_remaining` dict comparison that caused `TypeError` on log line after per-symbol refactor
+
+**Testing:**
+- `config/paper_fast_open.yaml` — testing-only config: SMA(5,15) + loosened circuit breakers; explicit documentation that it is not for production validation
+- `tests/test_sma_crossover.py` — two new tests covering `max_position_notional_pct` cap behavior
 
 ---
 
