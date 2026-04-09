@@ -126,6 +126,11 @@ class StrategyConfig(BaseModel):
                 raise ValueError(f"sma_crossover atr_window must be an int >= 2, got {atr_window}")
             if risk_pct is not None and not (0 < risk_pct <= 0.1):
                 raise ValueError(f"sma_crossover risk_per_trade_pct must be in (0, 0.1], got {risk_pct}")
+            notional_pct = self.params.get("max_position_notional_pct")
+            if notional_pct is not None and not (0 < notional_pct <= 1):
+                raise ValueError(
+                    f"sma_crossover max_position_notional_pct must be in (0, 1], got {notional_pct}"
+                )
         return self
 
 
