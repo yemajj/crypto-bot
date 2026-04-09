@@ -1,6 +1,6 @@
 # cryptobot — Development Plan
 
-> Last updated: 2026-04-08  
+> Last updated: 2026-04-08 (session 2)
 > Current phase: **Phases 1–5 and Phase 7 complete. Phase 6 (live trading) gated on weeks of paper trading validation.**
 
 ---
@@ -193,6 +193,19 @@ EnsembleStrategy(Strategy)     ← new; wraps sub-strategies via config
 - Strategy parameter search using the backtest engine as the evaluation function
 - LLM-prompted indicator suggestions piped through the existing strategy ABC
 - Guardrails: all candidates must pass the same risk rules as production strategies
+
+---
+
+## Maintenance — Quick-win bug fixes ✅ COMPLETE (2026-04-08 session 2)
+
+Six correctness issues identified via code review and shipped in one commit:
+
+- **metrics.py** — break-even trades (pnl == 0) no longer counted as losses in `profit_factor` / `hit_rate`
+- **run_paper.py** — `signal.signal(SIGTERM, ...)` wrapped in try/except for Windows compatibility
+- **rules.py** — `MaxOpenPositions` now allows adding to an already-open position (pyramiding was incorrectly blocked)
+- **paper_broker.py** — added `mark_prices()` public accessor; removed direct `_mark_prices` access from run loop
+- **paper_broker.py** — `equity()` now raises `RuntimeError` instead of silently falling back when no mark price is set
+- **risk/state_builder.py** (new) — `build_risk_state()` shared helper extracted from both `run_paper.py` and `backtest/engine.py` to prevent future drift
 
 ---
 
