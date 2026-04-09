@@ -96,7 +96,7 @@ def _build_run_notes(config_path: str | Path, settings) -> str:
     tokens = [
         f"starting_cash={settings.run.starting_cash:.2f}",
         f"config={config_name}",
-        f"symbol={settings.run.market.symbols[0]}",
+        f"symbols={','.join(settings.run.market.symbols)}",
         f"timeframe={settings.run.market.timeframe}",
     ]
     if Path(config_path).stem == "paper_validation":
@@ -211,7 +211,7 @@ def main(config_path: str | Path) -> str:
     cooldown_remaining: dict[str, int] = {s: 0 for s in mc.symbols}
     entry_avg_prices: dict[str, Decimal] = {}
     order_timestamps: deque[datetime] = deque()
-    warmup_remaining: int = settings.run.warmup_bars
+    warmup_remaining: dict[str, int] = {s: settings.run.warmup_bars for s in mc.symbols}
 
     # --- Main loop -----------------------------------------------------------
     try:
@@ -229,7 +229,7 @@ def main(config_path: str | Path) -> str:
             # 1. Settle pending limit orders against this bar.
             limit_fills = broker.settle_pending(bar)
             for fill in limit_fills:
-                if warmup_remaining <= 0:
+                if warmup_remaining[symbol] <= 0:
                     record_fill(session_factory, fill)
                 _process_sell_fill(
                     fill, symbol, entry_avg_prices,
@@ -240,7 +240,7 @@ def main(config_path: str | Path) -> str:
             # 1b. Check stop-loss triggers against this bar's low.
             stop_fills = broker.check_stops(bar)
             for fill in stop_fills:
-                if warmup_remaining <= 0:
+                if warmup_remaining[symbol] <= 0:
                     record_fill(session_factory, fill)
                     notifier.send(
                         f"<b>Stop-loss triggered</b> {symbol}\n"
@@ -283,14 +283,14 @@ def main(config_path: str | Path) -> str:
                 warmup=warmup_remaining > 0,
             )
 
-            if warmup_remaining <= 0:
+            if warmup_remaining[symbol] <= 0:
                 record_equity_snapshot(
                     session_factory, run_id, bar.ts_open, equity, broker.cash
                 )
 
             # Skip order submission during warm-up.
-            if warmup_remaining > 0:
-                warmup_remaining -= 1
+            if warmup_remaining[symbol] > 0:
+                warmup_remaining[symbol] -= 1
                 continue
 
             # 6. Strategy context and intents.

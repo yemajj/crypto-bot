@@ -41,7 +41,7 @@ def test_build_run_notes_tags_validation_profile():
     notes = _build_run_notes(Path("config/paper_validation.yaml"), _settings())
     assert "starting_cash=10000.00" in notes
     assert "config=paper_validation.yaml" in notes
-    assert "symbol=BTC/USDT" in notes
+    assert "symbols=BTC/USDT" in notes
     assert "timeframe=5m" in notes
     assert "validation_profile=paper_validation" in notes
 
