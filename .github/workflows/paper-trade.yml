@@ -49,8 +49,8 @@ jobs:
           CRYPTOBOT_ENV=paper
           CRYPTOBOT_LOG_LEVEL=INFO
           EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME }}
-          EXCHANGE_API_KEY=${{ secrets.EXCHANGE_API_KEY }}
-          EXCHANGE_API_SECRET=${{ secrets.EXCHANGE_API_SECRET }}
+          EXCHANGE_API_KEY=
+          EXCHANGE_API_SECRET=
           EXCHANGE_TESTNET=false
           CRYPTOBOT_DB_URL=sqlite:///./data/cryptobot.sqlite
           CRYPTOBOT_DATA_DIR=./data
