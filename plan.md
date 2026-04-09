@@ -90,7 +90,9 @@
 - `journal/writer.py` — `record_equity_snapshot()` (paper, one row/bar) + `record_equity_snapshots_bulk()` (backtest, one transaction)
 - `analytics/queries.py` — DB query layer: `get_equity_curve()`, `reconstruct_trades()` (FIFO), `daily_summary()`, `symbol_breakdown()`, `fee_impact()`
 - `analytics/report.py` — full text report using DB equity snapshots for accurate Sharpe/drawdown; pre-live checklist (Sharpe > 1.0, DD < 20%, ≥30 trades, win rate > 40%, fees < 15% gross)
-- `cli.py` — `cryptobot report [--run-id] [--list]`
+- `analytics/validation.py` — multi-run validation summary for completed tagged paper runs
+- `cli.py` — `cryptobot report [--run-id] [--list]` and `cryptobot validate-paper [--days N] [--run-id ...]`
+- `config/paper_validation.yaml` + `docs/paper_validation.md` — standard validation profile and runbook
 
 ---
 

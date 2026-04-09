@@ -72,12 +72,12 @@ src/cryptobot/
   strategy/      Strategy ABC, registry, starter SMA crossover (Phase 3).
   risk/          Risk rules and gatekeeper.
   execution/     Broker ABC, paper / backtest brokers, fees + slippage.
-  backtest/      Bar-by-bar engine and metrics.
+  backtest/      Bar-by-bar engine, metrics, walk-forward validation.
   journal/       SQLAlchemy models + writer (runs, signals, orders, fills).
-  analytics/     Read-only reporting from the journal.
+  analytics/     Per-run reporting and multi-run paper-validation summaries.
   app/           Mode entry points (run_backtest, run_paper, run_live).
   cli.py         Typer CLI (`cryptobot ...`).
-config/          YAML config files (default / backtest / paper).
+config/          YAML config files (default / backtest / paper / validation).
 tests/           Pytest tests for foundational pieces.
 data/            Local SQLite + parquet (gitignored).
 logs/            Structured JSON logs (gitignored).
@@ -174,6 +174,7 @@ cryptobot report
 # inspect readiness across tagged validation runs
 cryptobot validate-paper
 cryptobot validate-paper --days 28
+cryptobot validate-paper --run-id paper_abc123 --run-id paper_def456
 ```
 
 Stop a paper run with `Ctrl-C` or by creating the kill-switch file. For the full runbook and manual checks, see `docs/paper_validation.md`.

@@ -87,7 +87,7 @@ def compute_metrics(
 
     if n_trades > 0:
         wins = [t for t in trades if t.pnl > 0]
-        losses = [t for t in trades if t.pnl <= 0]
+        losses = [t for t in trades if t.pnl < 0]
         hit_rate = len(wins) / n_trades
 
         gross_wins = sum(t.pnl for t in wins)

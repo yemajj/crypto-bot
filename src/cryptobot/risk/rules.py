@@ -154,6 +154,9 @@ class MaxOpenPositions(RiskRule):
     def check(self, intent: Intent, state: RiskState) -> Verdict:
         if intent.side == Side.SELL:
             return Verdict.allow()
+        # Adding to an already-open position doesn't open a new one.
+        if intent.symbol in state.open_intents_by_symbol:
+            return Verdict.allow()
         n_open = len(state.open_intents_by_symbol)
         if n_open >= self._max:
             return Verdict.deny(

@@ -90,19 +90,27 @@ class PaperBroker(Broker):
     def equity(self) -> float:
         """Cash + mark-to-market value of all open positions.
 
-        Uses the most recently supplied price via update_price(). If no price
-        has been set for a symbol, falls back to the position's avg_price
-        (entry price), which will understate gains and overstate losses.
+        Raises RuntimeError if update_price() has not been called for a symbol
+        with an open position — the run loop must keep prices current.
         """
-        pos_value = sum(
-            float(pos.qty) * float(self._mark_prices.get(sym, pos.avg_price))
-            for sym, pos in self._positions.items()
-            if pos.qty > Decimal("0")
-        )
+        pos_value = 0.0
+        for sym, pos in self._positions.items():
+            if pos.qty <= Decimal("0"):
+                continue
+            price = self._mark_prices.get(sym)
+            if price is None:
+                raise RuntimeError(
+                    f"No mark price for {sym!r}. Call update_price() before equity()."
+                )
+            pos_value += float(pos.qty) * float(price)
         return self._cash + pos_value
 
     def recent_fills(self) -> list[Fill]:
         return list(self._fills)
+
+    def mark_prices(self) -> dict[str, Decimal]:
+        """Return a copy of the current mark prices by symbol."""
+        return dict(self._mark_prices)
 
     # ------------------------------------------------------------------
     # Paper-specific methods (called by the run loop)

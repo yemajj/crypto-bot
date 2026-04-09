@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from typing import NamedTuple
 
@@ -34,7 +34,7 @@ from cryptobot.core.types import (
 )
 from cryptobot.execution.backtest_broker import BacktestBroker
 from cryptobot.risk.manager import RiskManager
-from cryptobot.risk.rules import RiskState
+from cryptobot.risk.state_builder import build_risk_state
 from cryptobot.strategy.base import Strategy, StrategyContext
 
 
@@ -151,24 +151,16 @@ class BacktestEngine:
             intents = self._strategy.on_bar(ctx)
 
             # --- 7. Risk state for this bar ---
-            cutoff = bar.ts_open - timedelta(seconds=60)
-            while order_timestamps and order_timestamps[0] < cutoff:
-                order_timestamps.popleft()
-
-            open_by_symbol: dict[str, int] = {}
-            if pos_now and pos_now.qty > Decimal("0"):
-                open_by_symbol[symbol] = 1
-
             daily_pnl = equity - day_start_equity
-            risk_state = RiskState(
+            open_positions = {symbol: pos_now.qty} if pos_now else {}
+            risk_state = build_risk_state(
                 equity=equity,
-                gross_exposure=(
-                    float(pos_now.qty) * float(bar.close) if pos_now else 0.0
-                ),
+                cash=self._broker.equity(),  # BacktestBroker.equity() returns cash
                 daily_pnl=daily_pnl,
-                orders_this_minute=len(order_timestamps),
-                open_intents_by_symbol=open_by_symbol,
-                mark_price_by_symbol={symbol: float(bar.close)},
+                order_timestamps=order_timestamps,
+                bar_ts=bar.ts_open,
+                open_positions=open_positions,
+                mark_prices={symbol: float(bar.close)},
             )
 
             # --- 8. Submit approved orders ---

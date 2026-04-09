@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import signal
 from collections import deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -78,9 +78,9 @@ from cryptobot.risk.rules import (
     MaxPositionSizePct,
     OneOrderPerSymbolInFlight,
     RequireStopLoss,
-    RiskState,
     SymbolAllowList,
 )
+from cryptobot.risk.state_builder import build_risk_state
 from cryptobot.strategy.base import StrategyContext
 from cryptobot.strategy.registry import get_strategy
 
@@ -105,7 +105,10 @@ def _build_run_notes(config_path: str | Path, settings) -> str:
 
 
 def main(config_path: str | Path) -> str:
-    signal.signal(signal.SIGTERM, _handle_sigterm)
+    try:
+        signal.signal(signal.SIGTERM, _handle_sigterm)
+    except (AttributeError, ValueError):
+        pass  # SIGTERM not available on Windows
 
     settings = load_settings(config_path)
     run_id = new_run_id("paper")
@@ -304,25 +307,16 @@ def main(config_path: str | Path) -> str:
             intents = strategy.on_bar(ctx)
 
             # 7. Build RiskState.
-            cutoff = bar.ts_open - timedelta(seconds=60)
-            while order_timestamps and order_timestamps[0] < cutoff:
-                order_timestamps.popleft()
-
-            open_by_symbol: dict[str, int] = {
-                s: 1
-                for s, p in broker.positions().items()
-                if p.qty > Decimal("0")
-            }
-            risk_state = RiskState(
+            open_positions = {s: p.qty for s, p in broker.positions().items()}
+            risk_state = build_risk_state(
                 equity=equity,
-                gross_exposure=equity - broker.cash,
+                cash=broker.cash,
                 daily_pnl=equity - day_start_equity,
-                orders_this_minute=len(order_timestamps),
-                open_intents_by_symbol=open_by_symbol,
+                order_timestamps=order_timestamps,
+                bar_ts=bar.ts_open,
+                open_positions=open_positions,
+                mark_prices={k: float(v) for k, v in broker.mark_prices().items()},
                 consecutive_losses=consecutive_losses[symbol],
-                mark_price_by_symbol={
-                    k: float(v) for k, v in broker._mark_prices.items()
-                },
             )
 
             # 8. Risk-check and submit.
