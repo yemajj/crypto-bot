@@ -1,0 +1,88 @@
+# .github/workflows/paper-trade.yml
+
+name: Paper Trading Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: 'Config file to use'
+        required: false
+        default: 'config/paper_validation.yaml'
+        type: choice
+        options:
+          - config/paper_validation.yaml
+          - config/paper_fast.yaml
+      duration_minutes:
+        description: 'How long to run (minutes)'
+        required: false
+        default: '60'
+
+jobs:
+  paper-trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hour hard cap
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: claude/crypto-bot-framework-JZzO0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Write .env from secrets
+        run: |
+          cat <<EOF > .env
+          CRYPTOBOT_ENV=paper
+          CRYPTOBOT_LOG_LEVEL=INFO
+          EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME }}
+          EXCHANGE_API_KEY=${{ secrets.EXCHANGE_API_KEY }}
+          EXCHANGE_API_SECRET=${{ secrets.EXCHANGE_API_SECRET }}
+          EXCHANGE_TESTNET=false
+          CRYPTOBOT_DB_URL=sqlite:///./data/cryptobot.sqlite
+          CRYPTOBOT_DATA_DIR=./data
+          CRYPTOBOT_LOG_DIR=./logs
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+          CRYPTOBOT_KILL_SWITCH_FILE=./KILL_SWITCH
+          EOF
+
+      - name: Fetch recent history
+        run: |
+          source .venv/bin/activate
+          cryptobot fetch-history --symbol BTC/USDT --timeframe 5m --since 2024-01-01
+
+      - name: Run paper trading
+        run: |
+          source .venv/bin/activate
+          timeout ${{ github.event.inputs.duration_minutes }}m \
+            cryptobot paper --config ${{ github.event.inputs.config }} || true
+
+      - name: Generate report
+        if: always()
+        run: |
+          source .venv/bin/activate
+          cryptobot report || true
+
+      - name: Upload logs and data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-trade-results-${{ github.run_id }}
+          path: |
+            logs/
+            data/cryptobot.sqlite
+          retention-days: 14
