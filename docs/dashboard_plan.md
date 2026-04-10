@@ -42,6 +42,10 @@ CLI entry points (`cli.py`) are unchanged — they already call `app/` directly.
 `run_paper.main()` is a blocking loop; it must not run on Streamlit's main
 thread. Use `threading.Thread` + `threading.Event`:
 
+**Process-model decision: in-process threading (not subprocess).** Chosen for
+simplicity and reliable graceful shutdown via `threading.Event`; subprocess-based
+orchestration is deferred to the FastAPI migration phase.
+
 ```python
 # run_service.py (conceptual sketch)
 _stop_event: threading.Event | None = None
@@ -129,6 +133,12 @@ def save_run_config(config_path: Path, updates: dict) -> None
     # Re-validates via RunConfig(**merged) before saving to disk
 ```
 
+**Phasing:** The Config Editor page ships as read-only display first; the save
+form is a follow-on. Edits are limited to the explicit `EDITABLE_FIELDS`
+allowlist above. `save_run_config` writes to a **new file** (e.g.
+`config/<name>.custom.yaml`) and never overwrites the source file. The new
+path is then passed to `start_paper()` / `run_backtest()`.
+
 ### Kill Switch
 
 No dedicated service needed — expose three one-liners from `run_service.py`:
@@ -177,6 +187,8 @@ Telegram tokens, kill switch path).
 - Do not bypass the risk manager
 - All safety controls (`KillSwitchFile`, `RequireStopLoss`) remain active
 - No overengineering — no async, no message queues, no Redis
+- v1 supports only one active run at a time (one paper run or one backtest, never concurrent)
+- Multi-run management is out of scope for MVP
 
 ---
 
@@ -195,8 +207,10 @@ Telegram tokens, kill switch path).
      `streamlit-autorefresh` component or manual refresh button; Streamlit has
      no built-in push model)
    - `Backtest` — config picker, CSV path input, run + results
-   - `Config Editor` — safe-fields form with pydantic validation feedback
-     (validate on load too — show clear error if YAML on disk is invalid)
+   - `Config Editor` — read-only display of current config (v1); safe-fields
+     edit form is a follow-on step. If editing is enabled, writes go to a new
+     `*.custom.yaml` file, never overwriting the source. Pydantic validation
+     runs on load (show clear error if YAML on disk is invalid) and before save.
    - `Logs` — last N log lines with level filter
    - `History` — run list → drill into trades/metrics
 
