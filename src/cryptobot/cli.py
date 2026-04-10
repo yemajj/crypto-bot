@@ -176,6 +176,21 @@ def validate_paper(
 
 
 @app.command()
+def dashboard() -> None:
+    """Launch the Streamlit dashboard (paper trading + backtesting UI)."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    app_path = Path(__file__).parent / "dashboard" / "app.py"
+    result = subprocess.run(
+        [sys.executable, "-m", "streamlit", "run", str(app_path)],
+        check=False,
+    )
+    raise typer.Exit(code=result.returncode)
+
+
+@app.command()
 def live() -> None:
     """Refuses to run in v1 — live trading is disabled by design."""
     try:
