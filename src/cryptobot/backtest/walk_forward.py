@@ -374,7 +374,7 @@ def _print_fold_row(
     end: datetime,
     m: Metrics,
 ) -> None:
-    window = f"{start.strftime('%Y-%m-%d')} → {end.strftime('%Y-%m-%d')}"
+    window = f"{start.strftime('%Y-%m-%d')} -> {end.strftime('%Y-%m-%d')}"
     sortino_str = " 999+" if m.sortino >= 999 else f"{m.sortino:>6.2f}"
     print(
         f"  {fold:>3}{label}  {window:<23}  "
