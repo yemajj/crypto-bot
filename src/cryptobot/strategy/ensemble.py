@@ -43,10 +43,11 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from cryptobot.allocation.allocator import Allocator, FixedRiskAllocator, RegimeScaledAllocator
 from cryptobot.core.types import Intent, OrderType, Side
 from cryptobot.monitoring.logging_setup import get_logger
 from cryptobot.strategy.base import ScoringStrategy, Strategy, StrategyContext, _compute_atr
-from cryptobot.strategy.regime_detector import detect_regime
+from cryptobot.strategy.regime_detector import Regime, detect_regime
 from cryptobot.strategy.registry import get_strategy, register_strategy
 from cryptobot.strategy.signal_aggregator import DEFAULT_REGIME_WEIGHTS, SignalAggregator
 from cryptobot.strategy.volume_signal import VolumeSignalStrategy
@@ -63,7 +64,11 @@ class EnsembleStrategy(Strategy):
 
     bucket = "ensemble"   # not used as a directional bucket; here for symmetry
 
-    def __init__(self, params: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        params: dict[str, Any] | None = None,
+        allocator: Allocator | None = None,
+    ) -> None:
         super().__init__(params)
         cfg = self.params
 
@@ -110,6 +115,21 @@ class EnsembleStrategy(Strategy):
         self._atr_window = int(cfg.get("atr_window", 14))
         self._stop_multiplier = float(cfg.get("stop_distance_multiplier", 1.5))
         self._risk_pct = float(cfg.get("risk_per_trade_pct", 0.005))
+
+        # Allocation layer — injected or built from config params
+        if allocator is not None:
+            self._allocator: Allocator = allocator
+        else:
+            base = FixedRiskAllocator(
+                risk_per_trade_pct=self._risk_pct,
+                stop_distance_multiplier=self._stop_multiplier,
+            )
+            regime_cfg = cfg.get("regime_allocation")
+            if regime_cfg:
+                factors = {Regime(k): float(v) for k, v in regime_cfg.items()}
+                self._allocator = RegimeScaledAllocator(base, regime_factors=factors)
+            else:
+                self._allocator = RegimeScaledAllocator(base)
 
     def on_bar(self, ctx: StrategyContext) -> list[Intent]:
         # --- Collect bucket scores ---
@@ -188,8 +208,7 @@ class EnsembleStrategy(Strategy):
         if result.final_score >= buy_threshold and ctx.position.qty <= 0:
             stop_distance = atr * self._stop_multiplier
             current_close = float(ctx.history[-1].close)
-            risk_amount = ctx.equity * self._risk_pct
-            qty = Decimal(str(round(risk_amount / stop_distance, 8)))
+            qty = self._allocator.allocate(result.final_score, regime, ctx.equity, atr)
             stop_price = Decimal(str(round(current_close - stop_distance, 8)))
 
             reason = (
