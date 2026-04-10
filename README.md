@@ -76,6 +76,8 @@ src/cryptobot/
   journal/       SQLAlchemy models + writer (runs, signals, orders, fills).
   analytics/     Per-run reporting and multi-run paper-validation summaries.
   app/           Mode entry points (run_backtest, run_paper, run_live).
+  services/      UI-agnostic service layer (run lifecycle, log reader, config writer).
+  dashboard/     Streamlit dashboard (app.py + 6 pages).
   cli.py         Typer CLI (`cryptobot ...`).
 config/          YAML config files (default / backtest / paper / validation).
 tests/           Pytest tests for foundational pieces.
@@ -138,6 +140,47 @@ written to YAML or to logs.
 - **Risk manager** enforces hard caps: max position size, max gross exposure,
   max daily loss, orders/minute, symbol allow-list.
 - **No live trading in v1.** `cryptobot live` is a stub that refuses to run.
+
+---
+
+## Dashboard
+
+A Streamlit UI lets you operate the bot — start/stop paper runs, launch
+backtests, inspect results, and toggle the kill switch — without touching the
+terminal.
+
+### Launch
+
+```bash
+cryptobot dashboard
+# or directly:
+streamlit run src/cryptobot/dashboard/app.py
+```
+
+The dashboard opens in your browser at `http://localhost:8501`.
+
+### Pages
+
+| Page | What it does |
+|------|-------------|
+| **Home** | Live run-status card (equity, run ID) and kill-switch toggle. Auto-refreshes every 5 s. |
+| **Paper Trading** | Start/stop a paper run, select config from sidebar, watch the equity curve update in real time. |
+| **Backtest** | Pick a config + OHLCV CSV path, run a backtest, and view the equity curve, trades table, daily PnL, and symbol breakdown inline. |
+| **Config Editor** | Read-only display of the selected YAML config (v1). A safe-edit form (writes to `*.custom.yaml`, never overwrites the source) will ship as a follow-on. |
+| **Logs** | Tail structured log lines for any run; filter by level and number of lines. Auto-refreshes every 5 s. |
+| **History** | Searchable list of all runs with drill-down: equity curve, trades, daily PnL, symbol/strategy breakdowns, fee-impact summary, and the full pre-live report. |
+
+### Notes
+
+- **One active run at a time.** The dashboard enforces a single paper run or
+  backtest; multi-run management is out of scope for v1.
+- **Kill switch** can be armed/disarmed from the Home page. The running loop
+  checks the file every bar and halts within seconds.
+- **Config editing is read-only in v1.** Edit YAML files directly or use the
+  CLI. When editing ships, changes will be saved to `<name>.custom.yaml` and
+  secrets (`EnvSettings`) will never be exposed in the UI.
+- The paper run survives Streamlit page refreshes — the background thread is a
+  module-level singleton.
 
 ---
 
