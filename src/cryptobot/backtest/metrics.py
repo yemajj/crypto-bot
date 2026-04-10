@@ -42,14 +42,18 @@ _BARS_PER_YEAR: dict[str, float] = {
 
 @dataclass
 class Metrics:
-    total_return: float = 0.0       # (final − initial) / initial
-    max_drawdown: float = 0.0       # max peak-to-trough / peak (positive number)
-    sharpe: float = 0.0             # annualised Sharpe; risk-free = 0
-    profit_factor: float = 0.0      # sum(wins) / abs(sum(losses)); 0 if no losses
-    hit_rate: float = 0.0           # winning trades / closed trades
-    n_trades: int = 0               # closed round-trips
-    avg_trade_return: float = 0.0   # mean(pnl / entry_value) per trade
-    time_in_market_pct: float = 0.0 # % of bars holding a position
+    total_return: float = 0.0           # (final − initial) / initial
+    max_drawdown: float = 0.0           # max peak-to-trough / peak (positive number)
+    sharpe: float = 0.0                 # annualised Sharpe; risk-free = 0
+    sortino: float = 0.0                # annualised Sortino (downside deviation only)
+    calmar: float = 0.0                 # annualised return / max drawdown; 0 if no drawdown
+    profit_factor: float = 0.0          # sum(wins) / abs(sum(losses)); 0 if no losses
+    hit_rate: float = 0.0               # winning trades / closed trades
+    n_trades: int = 0                   # closed round-trips
+    avg_trade_return: float = 0.0       # mean(pnl / entry_value) per trade
+    time_in_market_pct: float = 0.0     # % of bars holding a position
+    max_consecutive_losses: int = 0     # longest losing streak by trade count
+    max_consecutive_wins: int = 0       # longest winning streak by trade count
 
 
 def compute_metrics(
@@ -78,12 +82,16 @@ def compute_metrics(
 
     max_drawdown = _max_drawdown(equity_curve)
     sharpe = _sharpe(equity_curve, timeframe)
+    sortino = _sortino(equity_curve, timeframe)
+    calmar = _calmar(equity_curve, timeframe, max_drawdown)
 
     n_trades = len(trades)
     hit_rate = 0.0
     avg_trade_return = 0.0
     profit_factor = 0.0
     time_pct = 0.0
+    max_consecutive_losses = 0
+    max_consecutive_wins = 0
 
     if n_trades > 0:
         wins = [t for t in trades if t.pnl > 0]
@@ -100,6 +108,8 @@ def compute_metrics(
         ]
         avg_trade_return = sum(trade_returns) / n_trades
 
+        max_consecutive_losses, max_consecutive_wins = _consecutive_streaks(trades)
+
     total_bars = len(equity_curve) - 1  # bar 0 is pre-loop
     if total_bars > 0:
         time_pct = bars_in_position / total_bars * 100.0
@@ -108,11 +118,15 @@ def compute_metrics(
         total_return=total_return,
         max_drawdown=max_drawdown,
         sharpe=sharpe,
+        sortino=sortino,
+        calmar=calmar,
         profit_factor=profit_factor,
         hit_rate=hit_rate,
         n_trades=n_trades,
         avg_trade_return=avg_trade_return,
         time_in_market_pct=time_pct,
+        max_consecutive_losses=max_consecutive_losses,
+        max_consecutive_wins=max_consecutive_wins,
     )
 
 
@@ -146,3 +160,63 @@ def _sharpe(equity_curve: list[float], timeframe: str) -> float:
         return 0.0
     bars_per_year = _BARS_PER_YEAR.get(timeframe, 365.0)
     return (mean_r / std_r) * math.sqrt(bars_per_year)
+
+
+def _sortino(equity_curve: list[float], timeframe: str) -> float:
+    """Annualised Sortino ratio (downside deviation; risk-free = 0)."""
+    if len(equity_curve) < 3:
+        return 0.0
+    returns = [
+        (equity_curve[i] - equity_curve[i - 1]) / equity_curve[i - 1]
+        for i in range(1, len(equity_curve))
+        if equity_curve[i - 1] > 0
+    ]
+    if len(returns) < 2:
+        return 0.0
+    mean_r = sum(returns) / len(returns)
+    downside = [r for r in returns if r < 0]
+    if not downside:
+        # No negative returns — perfect upside, Sortino is undefined; return a large sentinel.
+        return 999.0
+    downside_var = sum(r ** 2 for r in downside) / len(returns)
+    downside_std = math.sqrt(downside_var)
+    if downside_std == 0:
+        return 0.0
+    bars_per_year = _BARS_PER_YEAR.get(timeframe, 365.0)
+    return (mean_r / downside_std) * math.sqrt(bars_per_year)
+
+
+def _calmar(equity_curve: list[float], timeframe: str, max_drawdown: float) -> float:
+    """Calmar ratio: annualised return / max drawdown. Returns 0 if drawdown is 0."""
+    if max_drawdown == 0.0 or len(equity_curve) < 2:
+        return 0.0
+    initial = equity_curve[0]
+    final = equity_curve[-1]
+    if initial <= 0:
+        return 0.0
+    n_bars = len(equity_curve) - 1
+    bars_per_year = _BARS_PER_YEAR.get(timeframe, 365.0)
+    # Compound annualisation
+    total_return = final / initial
+    annualised_return = total_return ** (bars_per_year / n_bars) - 1
+    return annualised_return / max_drawdown
+
+
+def _consecutive_streaks(trades: list[ClosedTrade]) -> tuple[int, int]:
+    """Return (max_consecutive_losses, max_consecutive_wins)."""
+    max_losses = max_wins = cur_losses = cur_wins = 0
+    for t in trades:
+        if t.pnl > 0:
+            cur_wins += 1
+            cur_losses = 0
+        elif t.pnl < 0:
+            cur_losses += 1
+            cur_wins = 0
+        else:
+            cur_losses = 0
+            cur_wins = 0
+        if cur_losses > max_losses:
+            max_losses = cur_losses
+        if cur_wins > max_wins:
+            max_wins = cur_wins
+    return max_losses, max_wins
