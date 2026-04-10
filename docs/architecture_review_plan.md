@@ -1,5 +1,11 @@
 # Trading Bot Architecture Review: Current Bot vs. Video Approach
 
+> **Implementation status (2026-04-10):** All P0–P2 items below are **complete**. P3 is
+> conditional — only pursue if walk-forward OOS results show the strategy consistently loses.
+> Next session: run `cryptobot walk-forward --optimise` on real OHLCV data and interpret results.
+
+
+
 ## Context
 
 The user wants a blunt, engineering-focused comparison of their existing crypto trading bot against an architecture demonstrated in a YouTube video (HMM regime detection, allocation layer, circuit breakers, broker integration, Streamlit dashboard). The goal is to determine whether to keep building, partially refactor, or start over.
@@ -86,45 +92,25 @@ The current bot is production-grade infrastructure that would take months to reb
 
 ## Concrete Action Plan (Priority Order)
 
-### P0: Strategy Evaluation Improvements (do first)
+### P0: Strategy Evaluation Improvements ✅ COMPLETE
 
-**Why:** You can't improve what you can't measure. The current walk-forward doesn't optimize, and metrics are missing key ratios.
+1. **Sortino and Calmar ratios** — `src/cryptobot/backtest/metrics.py`, `tests/test_metrics.py` (23 tests)
+2. **Max consecutive losses/wins** — `src/cryptobot/backtest/metrics.py`
+3. **Walk-forward parameter grid search** — `src/cryptobot/backtest/param_grid.py` (13 tests), `walk_forward.py`
 
-1. **Add Sortino and Calmar ratios to `backtest/metrics.py`** (~30 lines)
-   - Sortino: uses downside deviation instead of total std
-   - Calmar: annualized return / max drawdown
-   - Files: `src/cryptobot/backtest/metrics.py`, `tests/test_metrics.py`
+### P1: Allocation Layer ✅ COMPLETE
 
-2. **Add max consecutive losses/wins to Metrics** (~15 lines)
-   - Helps detect strategy instability
-   - File: `src/cryptobot/backtest/metrics.py`
+4. **`src/cryptobot/allocation/` module** — `Allocator` ABC, `FixedRiskAllocator`, `RegimeScaledAllocator` (20 tests).
+   `Regime` enum moved to `src/cryptobot/core/regimes.py` to break circular import.
+   Wired into `EnsembleStrategy` as injected dependency; `regime_allocation` YAML key for custom factors.
 
-3. **Walk-forward with parameter grid search** (~100 lines)
-   - For each fold: run in-sample with N parameter combinations, pick best Sharpe, validate on out-of-sample
-   - Keep it simple: small grid (e.g., fast SMA: [10,15,20,25], slow: [40,50,60])
-   - Files: `src/cryptobot/backtest/walk_forward.py`, new `src/cryptobot/backtest/param_grid.py`
+### P2: Backtest Realism ✅ COMPLETE
 
-### P1: Allocation Layer Extraction (do second)
+5. **Size-dependent slippage** — `src/cryptobot/execution/fees.py`: tiered 1×/2×/3× bps by notional.
+   Updated `backtest_broker.py` and `paper_broker.py` callers. `tests/test_fees.py` updated.
 
-**Why:** Decouples "which direction" (strategy) from "how much" (allocator). Enables regime-based sizing without modifying strategies.
-
-4. **Create `src/cryptobot/allocation/` module** with:
-   - `Allocator` ABC: `allocate(score, regime, equity, atr) -> Decimal` (returns qty)
-   - `FixedRiskAllocator`: current ATR-based sizing (extract from `ScoringStrategy.on_bar()`)
-   - `RegimeScaledAllocator`: multiplies base allocation by regime factor (e.g., trending=1.0, ranging=0.5, breakout=0.75)
-   - Wire into `EnsembleStrategy` as an injected dependency
-   - Files: new `src/cryptobot/allocation/allocator.py`, modify `src/cryptobot/strategy/ensemble.py`
-
-### P2: Backtest Realism (do third)
-
-5. **Size-dependent slippage** — Replace flat bps with tiered model (~40 lines)
-   - Small orders (<$1k): current slippage
-   - Medium ($1k-$10k): 2x slippage
-   - Large (>$10k): 3x slippage + random component
-   - File: `src/cryptobot/execution/fees.py`
-
-6. **Gap-through stop handling** — If bar opens below stop, fill at open (not stop price)
-   - File: `src/cryptobot/execution/backtest_broker.py:84-120`
+6. **Gap-through stop handling** — `src/cryptobot/execution/backtest_broker.py`: fills at `bar.open` when
+   market gaps through stop price.
 
 ### P3: Regime Detection Improvements (do if P0-P2 show strategy needs help)
 
