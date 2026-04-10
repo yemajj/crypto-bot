@@ -55,8 +55,12 @@ def paper_status() -> RunStatus               # reads thread + last DB snapshot
 Thread and event live as **module-level singletons** so Streamlit reruns do not
 re-spawn them. Paper run survives page refresh.
 
-`run_paper.main()` must accept a `stop_event: threading.Event` parameter (or
-poll it via an injected callback) so it exits cleanly when signalled.
+`run_paper.main()` must accept an optional `stop_event: threading.Event | None
+= None` parameter and poll `stop_event.is_set()` in the bar loop alongside the
+existing kill-switch file check. **Important:** `signal.signal(SIGTERM, ...)`
+can only be registered from the main thread, so when `stop_event` is provided
+(i.e. running inside a service thread), the SIGTERM handler registration must
+be skipped. The stop-event poll replaces it as the shutdown mechanism.
 
 ### FastAPI Migration Safety
 
@@ -89,12 +93,19 @@ class RunStatus:
     last_bar_ts: datetime | None   # from last equity_snapshot row
     equity: float | None
     mode: str | None               # "paper" | "backtest" | None
+    error: str | None              # populated if thread exited with exception
 
 def start_paper(config_path: Path) -> str        # spawns thread, returns run_id
 def stop_paper(timeout_s: float = 10) -> None    # signals + joins
 def paper_status() -> RunStatus                  # thread.is_alive() + DB query
-def run_backtest(config_path: Path, data_path: Path) -> BacktestResult  # blocking (backtest is fast)
+def run_backtest(config_path: Path, data_path: Path) -> str  # blocking, returns run_id
 ```
+
+**Thread error handling:** The thread target must be wrapped in try/except.
+On unhandled exception: capture the traceback into a module-level `_last_error`
+variable, call `record_run_end(factory, run_id, notes=str(exc))` so the DB
+reflects abnormal termination, and let `paper_status()` surface the error via
+`RunStatus.error`.
 
 ### log_service.py
 
@@ -110,7 +121,9 @@ def tail_run_log(run_id: str, log_dir: Path, n: int = 200) -> list[dict]
 # Locked fields: anything in EnvSettings (API keys, DB URL, tokens)
 EDITABLE_FIELDS: frozenset[str]  # explicit allowlist
 
-def load_run_config(config_path: Path) -> RunConfig
+def load_run_config(config_path: Path) -> RunConfig | None
+    # Returns None with logged error if YAML is invalid (hand-edited, partial write)
+    # The config editor page should display a clear validation error, not crash
 def save_run_config(config_path: Path, updates: dict) -> None
     # Validates updates against EDITABLE_FIELDS before writing
     # Re-validates via RunConfig(**merged) before saving to disk
@@ -178,9 +191,12 @@ Telegram tokens, kill switch path).
 
 3. **Build Streamlit app** at `src/cryptobot/dashboard/` with pages:
    - `Home` — status card, kill switch toggle
-   - `Paper Trading` — start/stop, live equity chart (auto-refresh)
+   - `Paper Trading` — start/stop, live equity chart (auto-refresh via
+     `streamlit-autorefresh` component or manual refresh button; Streamlit has
+     no built-in push model)
    - `Backtest` — config picker, CSV path input, run + results
    - `Config Editor` — safe-fields form with pydantic validation feedback
+     (validate on load too — show clear error if YAML on disk is invalid)
    - `Logs` — last N log lines with level filter
    - `History` — run list → drill into trades/metrics
 
