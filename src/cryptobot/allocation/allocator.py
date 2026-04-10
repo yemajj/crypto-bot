@@ -26,7 +26,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from decimal import Decimal
 
-from cryptobot.strategy.regime_detector import Regime
+from cryptobot.core.regimes import Regime
 
 _DEFAULT_REGIME_FACTORS: dict[Regime, float] = {
     Regime.TRENDING: 1.0,
