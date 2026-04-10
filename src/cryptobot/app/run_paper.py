@@ -33,6 +33,7 @@ Assumptions and design notes
 from __future__ import annotations
 
 import signal
+import threading
 from collections import deque
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -104,14 +105,21 @@ def _build_run_notes(config_path: str | Path, settings) -> str:
     return " ".join(tokens)
 
 
-def main(config_path: str | Path) -> str:
-    try:
-        signal.signal(signal.SIGTERM, _handle_sigterm)
-    except (AttributeError, ValueError):
-        pass  # SIGTERM not available on Windows
+def main(
+    config_path: str | Path,
+    stop_event: threading.Event | None = None,
+    run_id: str | None = None,
+) -> str:
+    # Only register SIGTERM on the main thread (can't register from a worker thread).
+    if stop_event is None:
+        try:
+            signal.signal(signal.SIGTERM, _handle_sigterm)
+        except (AttributeError, ValueError):
+            pass  # SIGTERM not available on Windows or non-main thread
 
     settings = load_settings(config_path)
-    run_id = new_run_id("paper")
+    if run_id is None:
+        run_id = new_run_id("paper")
     run_notes = _build_run_notes(config_path, settings)
     log = setup_logging(
         log_dir=settings.env.log_dir,
@@ -224,6 +232,11 @@ def main(config_path: str | Path) -> str:
                     "kill_switch_triggered",
                     path=str(settings.env.kill_switch_file),
                 )
+                break
+
+            # Stop-event check — used when running inside a service thread.
+            if stop_event is not None and stop_event.is_set():
+                log.info("stop_event_triggered")
                 break
 
             # 1. Settle pending limit orders against this bar.
