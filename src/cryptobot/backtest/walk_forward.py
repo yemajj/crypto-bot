@@ -248,36 +248,40 @@ def print_optimised_walk_forward_report(
     timeframe: str,
 ) -> None:
     """Print a formatted optimised walk-forward summary to stdout."""
-    sep = "=" * 80
-    thin = "-" * 80
+    sep = "=" * 84
+    thin = "-" * 84
 
     print(f"\n{sep}")
     print(f"  OPTIMISED WALK-FORWARD  {symbol}  {timeframe}  ({len(results)} folds)")
     print(sep)
     print(
         f"  {'Fold':>4}  {'Window':^23}  "
-        f"{'Sharpe':>7}  {'MaxDD':>7}  {'WinRate':>8}  {'Trades':>6}  {'Return':>8}  {'Best params'}"
+        f"{'Sharpe':>7}  {'Sortino':>7}  {'MaxDD':>7}  {'WinRate':>8}  {'Trades':>6}  {'Return':>8}"
     )
 
     for r in results:
         params_str = " ".join(f"{k}={v}" for k, v in sorted(r.best_params.items()))
         _print_fold_row("IN ", r.fold, r.in_sample_start, r.in_sample_end, r.in_sample.metrics)
         _print_fold_row("OUT", r.fold, r.out_sample_start, r.out_sample_end, r.out_sample.metrics)
-        print(f"  {'':>4}  {'best: ' + params_str:<23}")
+        print(f"  {'':>4}  {'best: ' + params_str}")
         print(thin)
 
     out_metrics = [r.out_sample.metrics for r in results]
     mean_sharpe = _mean(m.sharpe for m in out_metrics)
+    mean_sortino = _mean(min(m.sortino, 99.0) for m in out_metrics)
     mean_dd = _mean(m.max_drawdown for m in out_metrics)
     mean_wr = _mean(m.hit_rate for m in out_metrics)
     total_trades = sum(m.n_trades for m in out_metrics)
     mean_ret = _mean(m.total_return for m in out_metrics)
+    mean_calmar = _mean(m.calmar for m in out_metrics)
+    max_consec_loss = max((m.max_consecutive_losses for m in out_metrics), default=0)
 
     print(
         f"  {'':>4}  {'OUT-OF-SAMPLE MEAN':^23}  "
-        f"  {mean_sharpe:>6.2f}  {-mean_dd * 100:>6.1f}%"
+        f"  {mean_sharpe:>6.2f}  {mean_sortino:>6.2f}  {-mean_dd * 100:>6.1f}%"
         f"  {mean_wr * 100:>7.1f}%  {total_trades:>6d}  {mean_ret * 100:>+7.1f}%"
     )
+    print(f"  {'':>4}  {'Calmar (mean)':^23}  {mean_calmar:>6.2f}  |  Max consec. losses: {max_consec_loss}")
     print(f"{sep}\n")
 
 
@@ -327,15 +331,15 @@ def print_walk_forward_report(
     timeframe: str,
 ) -> None:
     """Print a formatted walk-forward summary to stdout."""
-    sep = "=" * 72
-    thin = "-" * 72
+    sep = "=" * 84
+    thin = "-" * 84
 
     print(f"\n{sep}")
     print(f"  WALK-FORWARD  {symbol}  {timeframe}  ({len(results)} folds)")
     print(sep)
     print(
         f"  {'Fold':>4}  {'Window':^23}  "
-        f"{'Sharpe':>7}  {'MaxDD':>7}  {'WinRate':>8}  {'Trades':>6}  {'Return':>8}"
+        f"{'Sharpe':>7}  {'Sortino':>7}  {'MaxDD':>7}  {'WinRate':>8}  {'Trades':>6}  {'Return':>8}"
     )
 
     for r in results:
@@ -346,16 +350,20 @@ def print_walk_forward_report(
     # Summary row: mean of out-of-sample metrics across folds.
     out_metrics = [r.out_sample.metrics for r in results]
     mean_sharpe = _mean(m.sharpe for m in out_metrics)
+    mean_sortino = _mean(min(m.sortino, 99.0) for m in out_metrics)  # cap sentinel for averaging
     mean_dd = _mean(m.max_drawdown for m in out_metrics)
     mean_wr = _mean(m.hit_rate for m in out_metrics)
     total_trades = sum(m.n_trades for m in out_metrics)
     mean_ret = _mean(m.total_return for m in out_metrics)
+    mean_calmar = _mean(m.calmar for m in out_metrics)
+    max_consec_loss = max((m.max_consecutive_losses for m in out_metrics), default=0)
 
     print(
         f"  {'':>4}  {'OUT-OF-SAMPLE MEAN':^23}  "
-        f"  {mean_sharpe:>6.2f}  {-mean_dd * 100:>6.1f}%"
+        f"  {mean_sharpe:>6.2f}  {mean_sortino:>6.2f}  {-mean_dd * 100:>6.1f}%"
         f"  {mean_wr * 100:>7.1f}%  {total_trades:>6d}  {mean_ret * 100:>+7.1f}%"
     )
+    print(f"  {'':>4}  {'Calmar (mean)':^23}  {mean_calmar:>6.2f}  |  Max consec. losses: {max_consec_loss}")
     print(f"{sep}\n")
 
 
@@ -367,9 +375,10 @@ def _print_fold_row(
     m: Metrics,
 ) -> None:
     window = f"{start.strftime('%Y-%m-%d')} → {end.strftime('%Y-%m-%d')}"
+    sortino_str = " 999+" if m.sortino >= 999 else f"{m.sortino:>6.2f}"
     print(
         f"  {fold:>3}{label}  {window:<23}  "
-        f"  {m.sharpe:>6.2f}  {-m.max_drawdown * 100:>6.1f}%"
+        f"  {m.sharpe:>6.2f}  {sortino_str}  {-m.max_drawdown * 100:>6.1f}%"
         f"  {m.hit_rate * 100:>7.1f}%  {m.n_trades:>6d}  {m.total_return * 100:>+7.1f}%"
     )
 

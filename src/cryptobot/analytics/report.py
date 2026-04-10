@@ -90,9 +90,14 @@ def build_report(run_id: str, db_url: str) -> RunReport:
     lines.append(f"  Win rate         : {metrics.hit_rate * 100:>11.1f} %")
     lines.append(f"  Profit factor    : {metrics.profit_factor:>12.2f}")
     lines.append(f"  Sharpe (annual)  : {metrics.sharpe:>12.2f}")
+    _sortino_str = "999 (no drawdown)" if metrics.sortino >= 999 else f"{metrics.sortino:>12.2f}"
+    lines.append(f"  Sortino (annual) : {_sortino_str}")
+    lines.append(f"  Calmar ratio     : {metrics.calmar:>12.2f}")
     lines.append(f"  Max drawdown     : {metrics.max_drawdown * 100:>11.1f} %")
     lines.append(f"  Avg trade return : {metrics.avg_trade_return * 100:>+11.2f} %")
     lines.append(f"  Time in market   : {metrics.time_in_market_pct:>11.1f} %")
+    lines.append(f"  Max consec. wins : {metrics.max_consecutive_wins:>12d}")
+    lines.append(f"  Max consec. loss : {metrics.max_consecutive_losses:>12d}")
 
     if fi.total_fees > 0:
         pct_str = f"  ({fi.fees_as_pct_of_gross:.1f}% of gross)" if fi.gross_profit > 0 else ""
@@ -171,8 +176,11 @@ def _build_equity_curve(starting_cash: float, trades: list) -> list[float]:
 
 
 def _pre_live_checklist(metrics, fi: "FeeImpact") -> list[str]:
+    sortino_ok = metrics.sortino >= 1.0 or metrics.sortino >= 999
+    sortino_str = "999 (no dd)" if metrics.sortino >= 999 else f"{metrics.sortino:.2f}"
     gates = [
         ("Sharpe > 1.0",        metrics.sharpe >= 1.0,          f"{metrics.sharpe:.2f}"),
+        ("Sortino > 1.0",       sortino_ok,                     sortino_str),
         ("Max DD < 20%",        metrics.max_drawdown < 0.20,    f"{metrics.max_drawdown * 100:.1f}%"),
         (">= 30 closed trades", metrics.n_trades >= 30,         str(metrics.n_trades)),
         ("Win rate > 40%",      metrics.hit_rate > 0.40,        f"{metrics.hit_rate * 100:.1f}%"),
