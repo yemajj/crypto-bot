@@ -178,6 +178,17 @@ class ScoringStrategy(Strategy):
             current_close = float(ctx.history[-1].close)
             risk_amount = ctx.equity * risk_pct
             qty = Decimal(str(round(risk_amount / stop_distance, 8)))
+
+            # Cap notional to avoid over-sized orders when ATR is tiny.
+            max_notional_pct = float(ctx.params.get("max_position_notional_pct", 1.0))
+            if max_notional_pct < 1.0 and current_close > 0:
+                max_qty = Decimal(str(round(ctx.equity * max_notional_pct / current_close, 8)))
+                if qty > max_qty:
+                    qty = max_qty
+
+            if qty <= 0:
+                return []
+
             stop_price = Decimal(str(round(current_close - stop_distance, 8)))
 
             return [Intent(
