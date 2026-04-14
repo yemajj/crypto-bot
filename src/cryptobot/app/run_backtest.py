@@ -140,6 +140,43 @@ def _parse_timestamp(raw: str) -> datetime:
 # Result bundle writer
 # ---------------------------------------------------------------------------
 
+def _verdict(m: Metrics, n_trades: int) -> str:
+    """Return a blunt one-line assessment of the backtest result."""
+    if n_trades == 0:
+        return "No trades executed — strategy produced no signals in this period."
+    ret = m.total_return * 100
+    dd = m.max_drawdown * 100
+    if ret < -5:
+        return (
+            f"Poor — lost {-ret:.1f}% with Sharpe {m.sharpe:.2f}. "
+            "No edge in this configuration."
+        )
+    if ret < 0:
+        return (
+            f"Negative — lost {-ret:.1f}%. "
+            f"Sharpe {m.sharpe:.2f}, drawdown {dd:.0f}%."
+        )
+    if m.sharpe < 0.3:
+        return (
+            f"Weak edge — {ret:.1f}% return but Sharpe {m.sharpe:.2f} is noise-level. "
+            "Not tradeable without further work."
+        )
+    if dd > 30:
+        return (
+            f"Risky — {ret:.1f}% return but {dd:.0f}% drawdown is too large. "
+            "Tighten risk controls first."
+        )
+    if m.sharpe >= 1.0 and ret > 5:
+        return (
+            f"Promising — {ret:.1f}% return, Sharpe {m.sharpe:.2f}, "
+            f"drawdown {dd:.0f}%. Worth walk-forward validation."
+        )
+    return (
+        f"Marginal — {ret:.1f}% return, Sharpe {m.sharpe:.2f}. "
+        "Run walk-forward before trusting this."
+    )
+
+
 def write_result_bundle(
     result: BacktestResult,
     bars: list[Bar],
@@ -163,6 +200,9 @@ def write_result_bundle(
     date_to = bars[-1].ts_open.strftime("%Y-%m-%d")
     starting = result.equity_curve[0]
     total_fees = sum(float(f.fee) for f in result.fills)
+    total_days = max((bars[-1].ts_open.date() - bars[0].ts_open.date()).days, 1)
+    trades_per_day = round(m.n_trades / total_days, 3)
+    expectancy = round((result.final_equity - starting) / m.n_trades, 2) if m.n_trades > 0 else 0.0
 
     # ---- metrics.json ----
     metrics_data = {
@@ -183,11 +223,14 @@ def write_result_bundle(
         "profit_factor": round(m.profit_factor, 4),
         "win_rate_pct": round(m.hit_rate * 100, 2),
         "n_trades": m.n_trades,
+        "trades_per_day": trades_per_day,
+        "expectancy_dollars": expectancy,
         "avg_trade_return_pct": round(m.avg_trade_return * 100, 4),
         "time_in_market_pct": round(m.time_in_market_pct, 2),
         "max_consecutive_losses": m.max_consecutive_losses,
         "max_consecutive_wins": m.max_consecutive_wins,
         "total_fees": round(total_fees, 2),
+        "verdict": _verdict(m, m.n_trades),
     }
     (out_dir / "metrics.json").write_text(json.dumps(metrics_data, indent=2))
 
@@ -213,33 +256,38 @@ def write_result_bundle(
     # ---- summary.md ----
     ret_sign = "+" if m.total_return >= 0 else ""
     avg_sign = "+" if m.avg_trade_return >= 0 else ""
+    exp_sign = "+" if expectancy >= 0 else ""
+    verdict = _verdict(m, m.n_trades)
     md = f"""\
-# Backtest Summary
+# Backtest: {strategy_name}
 
-**Run ID:** `{result.run_id}`
-**Strategy:** {strategy_name}
-**Symbol:** {symbol} {timeframe}
-**Period:** {date_from} → {date_to} ({result.n_bars:,} bars)
-**Starting cash:** ${starting:,.2f}
+> **{verdict}**
+
+**{symbol} {timeframe}** | {date_from} → {date_to} | {result.n_bars:,} bars | `{result.run_id}`
+
+---
 
 ## Returns
 
 | Metric | Value |
 |---|---|
-| Final Equity | ${result.final_equity:,.2f} |
 | Total Return | {ret_sign}{m.total_return * 100:.2f}% |
 | Max Drawdown | -{m.max_drawdown * 100:.2f}% |
 | Sharpe Ratio | {m.sharpe:.2f} |
 | Sortino Ratio | {m.sortino:.2f} |
 | Calmar Ratio | {m.calmar:.2f} |
+| Final Equity | ${result.final_equity:,.2f} |
+| Starting Cash | ${starting:,.2f} |
 
-## Trading
+## Trades
 
 | Metric | Value |
 |---|---|
-| Closed Trades | {m.n_trades} |
+| Total Trades | {m.n_trades} |
+| Trades / Day | {trades_per_day} |
 | Win Rate | {m.hit_rate * 100:.1f}% |
 | Profit Factor | {m.profit_factor:.2f} |
+| Expectancy | {exp_sign}${expectancy:,.2f} / trade |
 | Avg Trade Return | {avg_sign}{m.avg_trade_return * 100:.3f}% |
 | Time in Market | {m.time_in_market_pct:.1f}% |
 | Max Consec. Losses | {m.max_consecutive_losses} |
