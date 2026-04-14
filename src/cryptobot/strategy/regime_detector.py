@@ -12,8 +12,7 @@ Returns RANGING when there are insufficient bars (safe default — no false sign
 
 from __future__ import annotations
 
-from enum import Enum
-
+from cryptobot.core.regimes import Regime  # noqa: F401 — re-exported for backward compat
 from cryptobot.core.types import Bar
 from cryptobot.strategy.base import _compute_atr
 
@@ -26,12 +25,6 @@ _SMA_SLOW: int = 50
 
 # Minimum bars needed: max(SMA_SLOW + 1, ATR_WINDOW + ATR_LOOKBACK)
 _MIN_BARS: int = max(_SMA_SLOW + 1, _ATR_WINDOW + _ATR_LOOKBACK)
-
-
-class Regime(str, Enum):
-    TRENDING = "trending"
-    RANGING = "ranging"
-    BREAKOUT_WATCH = "breakout_watch"
 
 
 def _sma(values: list[float], window: int) -> float:

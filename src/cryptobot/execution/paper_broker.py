@@ -232,7 +232,7 @@ class PaperBroker(Broker):
             )
 
         is_buy = order.side == Side.BUY
-        fill_price = self._fees.apply_slippage(price, buy=is_buy)
+        fill_price = self._fees.apply_slippage(price, order.qty, buy=is_buy)
         notional = fill_price * order.qty
         fee = self._fees.fee(notional, taker=True)
 
@@ -287,7 +287,7 @@ class PaperBroker(Broker):
 
         # Slippage only for market (taker) orders; limit fills at the limit price.
         if taker:
-            fill_price = self._fees.apply_slippage(raw_price, buy=is_buy)
+            fill_price = self._fees.apply_slippage(raw_price, order.qty, buy=is_buy)
         else:
             fill_price = raw_price
 

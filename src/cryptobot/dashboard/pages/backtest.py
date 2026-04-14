@@ -60,16 +60,46 @@ if run_id:
         engine = build_engine(db_url)
         sf = make_session_factory(engine)
 
-        # Equity curve
+        # Equity curve + metrics summary
         curve = get_equity_curve(sf, run_id)
+        fills_with_orders = get_fills_with_orders(sf, run_id)
+        trades = reconstruct_trades(fills_with_orders)
+
         if curve:
             import pandas as pd
             st.markdown("**Equity curve**")
             st.line_chart(pd.DataFrame({"equity": curve}), y="equity", use_container_width=True)
 
-        # Trades table
-        fills_with_orders = get_fills_with_orders(sf, run_id)
-        trades = reconstruct_trades(fills_with_orders)
+        # Metrics summary widget
+        if curve and len(curve) >= 2:
+            from cryptobot.backtest.metrics import ClosedTrade, compute_metrics
+
+            ct_list = [
+                ClosedTrade(
+                    symbol=t.symbol,
+                    entry_price=float(t.entry_price),
+                    exit_price=float(t.exit_price),
+                    qty=float(t.qty),
+                    pnl=float(t.net_pnl),
+                    n_bars=0,
+                )
+                for t in trades
+            ]
+            # Use a default timeframe for annualisation; 1h is a safe fallback.
+            m = compute_metrics([10_000.0] + curve, ct_list, "1h")
+
+            st.markdown("**Performance metrics**")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Sharpe", f"{m.sharpe:.2f}")
+            col2.metric("Sortino", "999+" if m.sortino >= 999 else f"{m.sortino:.2f}")
+            col3.metric("Calmar", f"{m.calmar:.2f}")
+            col4.metric("Max Drawdown", f"{m.max_drawdown * 100:.1f}%")
+
+            col5, col6, col7, col8 = st.columns(4)
+            col5.metric("Hit Rate", f"{m.hit_rate * 100:.1f}%")
+            col6.metric("Profit Factor", f"{m.profit_factor:.2f}")
+            col7.metric("Max Consec. Losses", str(m.max_consecutive_losses))
+            col8.metric("Trades", str(m.n_trades))
 
         if trades:
             import pandas as pd

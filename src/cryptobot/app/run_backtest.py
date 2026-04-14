@@ -125,10 +125,11 @@ def _parse_timestamp(raw: str) -> datetime:
         return datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
     except ValueError:
         pass
-    # Try ISO-8601.
+    # Try ISO-8601 (strip timezone suffix so strptime can parse it).
+    raw_naive = raw.split("+")[0].strip() if "+" in raw else raw.strip()
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
         try:
-            dt = datetime.strptime(raw, fmt)
+            dt = datetime.strptime(raw_naive, fmt)
             return dt.replace(tzinfo=timezone.utc)
         except ValueError:
             continue

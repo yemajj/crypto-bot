@@ -93,6 +93,8 @@ class OneOrderPerSymbolInFlight(RiskRule):
     name = "one_order_per_symbol_in_flight"
 
     def check(self, intent: Intent, state: RiskState) -> Verdict:
+        if intent.side == Side.SELL:
+            return Verdict.allow()  # exits must never be blocked
         if state.open_intents_by_symbol.get(intent.symbol, 0) >= 1:
             return Verdict.deny(f"order already in flight for {intent.symbol}")
         return Verdict.allow()

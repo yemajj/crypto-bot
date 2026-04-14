@@ -3,7 +3,7 @@ mode: backtest
 market:
   symbols:
     - BTC/USDT
-  timeframe: 1h
+  timeframe: 4h
 
 strategy:
   name: sma_crossover
@@ -12,9 +12,9 @@ strategy:
     slow: 50
     risk_per_trade_pct: 0.005
     atr_window: 14
-    max_position_notional_pct: 0.09  # clip notional to stay under 10% risk-cap
+    max_position_notional_pct: 0.09
     adx_window: 14
-    adx_threshold: 25  # only enter when trend strength ADX >= 25
+    adx_threshold: 25
 
 risk:
   max_position_pct: 0.10

@@ -84,9 +84,10 @@ class BacktestBroker(Broker):
     def check_stops(self, bar: Bar) -> list[Fill]:
         """Close any long position whose stop was breached during bar.
 
-        We fill at stop_price (not bar.low) with adverse slippage. This is
-        slightly optimistic vs. gap-through but more realistic than ignoring
-        the stop or filling at bar.low.
+        Gap-through handling: if the bar opens at or below the stop price
+        (i.e. the market gapped through the stop overnight or between bars),
+        we fill at bar.open — we can't fill at a price that was never traded.
+        Otherwise we fill at stop_price with adverse slippage.
         """
         stop_fills: list[Fill] = []
         symbol = bar.symbol
@@ -100,7 +101,9 @@ class BacktestBroker(Broker):
             return stop_fills
 
         if bar.low <= stop_price:
-            # Synthetic market-SELL order to close the position.
+            # Gap-through: bar opened below stop → fill at open, not stop.
+            fill_raw_price = bar.open if bar.open < stop_price else stop_price
+
             stop_order = Order(
                 order_id=new_order_id(),
                 run_id="stop",
@@ -113,7 +116,7 @@ class BacktestBroker(Broker):
                 ts_submitted=bar.ts_open,
                 status=OrderStatus.ACCEPTED,
             )
-            fill = self._execute(stop_order, stop_price, bar.ts_open)
+            fill = self._execute(stop_order, fill_raw_price, bar.ts_open)
             stop_fills.append(fill)
             self._stops.pop(symbol, None)
 
@@ -143,7 +146,7 @@ class BacktestBroker(Broker):
         """Apply slippage, compute fee, update cash and positions, record fill."""
         is_buy = order.side == Side.BUY
 
-        fill_price = self._fees.apply_slippage(raw_price, buy=is_buy)
+        fill_price = self._fees.apply_slippage(raw_price, order.qty, buy=is_buy)
         notional = fill_price * order.qty
         fee = self._fees.fee(notional, taker=True)
 

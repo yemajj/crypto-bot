@@ -68,6 +68,66 @@ def _compute_atr(bars: list[Bar], window: int) -> float:
     return sum(trs) / len(trs)
 
 
+def _compute_adx(bars: list[Bar], window: int = 14) -> float:
+    """Average Directional Index (Wilder smoothing).
+
+    Measures trend *strength* regardless of direction.
+    Returns a value in [0, 100]; values >= 25 indicate a meaningful trend.
+    Returns 0.0 when bars are insufficient (needs 2*window + 1 bars for a
+    reliable seed).
+    """
+    needed = 2 * window + 1
+    if len(bars) < needed:
+        return 0.0
+
+    # Seed Wilder smoothing using a simple average of the first `window` bars.
+    seed_bars = bars[: window + 1]
+    tr_sum = plus_dm_sum = minus_dm_sum = 0.0
+    for i in range(1, len(seed_bars)):
+        b, prev = seed_bars[i], seed_bars[i - 1]
+        high, low = float(b.high), float(b.low)
+        prev_high, prev_low, prev_close = float(prev.high), float(prev.low), float(prev.close)
+        tr_sum += max(high - low, abs(high - prev_close), abs(low - prev_close))
+        up, dn = high - prev_high, prev_low - low
+        plus_dm_sum += up if up > dn and up > 0 else 0.0
+        minus_dm_sum += dn if dn > up and dn > 0 else 0.0
+
+    atr_w = tr_sum / window
+    plus_di_w = plus_dm_sum / window
+    minus_di_w = minus_dm_sum / window
+
+    # Accumulate DX values after the seed window.
+    dx_values: list[float] = []
+    for i in range(window + 1, len(bars)):
+        b, prev = bars[i], bars[i - 1]
+        high, low = float(b.high), float(b.low)
+        prev_high, prev_low, prev_close = float(prev.high), float(prev.low), float(prev.close)
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        up, dn = high - prev_high, prev_low - low
+        plus_dm = up if up > dn and up > 0 else 0.0
+        minus_dm = dn if dn > up and dn > 0 else 0.0
+
+        # Wilder smoothing: new = prev * (n-1)/n + current
+        atr_w = atr_w * (window - 1) / window + tr
+        plus_di_w = plus_di_w * (window - 1) / window + plus_dm
+        minus_di_w = minus_di_w * (window - 1) / window + minus_dm
+
+        plus_di = 100.0 * plus_di_w / atr_w if atr_w > 0 else 0.0
+        minus_di = 100.0 * minus_di_w / atr_w if atr_w > 0 else 0.0
+        di_sum = plus_di + minus_di
+        dx_values.append(100.0 * abs(plus_di - minus_di) / di_sum if di_sum > 0 else 0.0)
+
+    if not dx_values:
+        return 0.0
+
+    # ADX = Wilder-smoothed DX; seed with simple mean of the first `window` DX values.
+    seed_dx = dx_values[:window]
+    adx = sum(seed_dx) / len(seed_dx)
+    for dx in dx_values[window:]:
+        adx = adx * (window - 1) / window + dx / window
+    return adx
+
+
 class ScoringStrategy(Strategy):
     """Strategy that exposes a scalar score in [-1.0, 1.0] via signal_score().
 
@@ -118,6 +178,17 @@ class ScoringStrategy(Strategy):
             current_close = float(ctx.history[-1].close)
             risk_amount = ctx.equity * risk_pct
             qty = Decimal(str(round(risk_amount / stop_distance, 8)))
+
+            # Cap notional to avoid over-sized orders when ATR is tiny.
+            max_notional_pct = float(ctx.params.get("max_position_notional_pct", 1.0))
+            if max_notional_pct < 1.0 and current_close > 0:
+                max_qty = Decimal(str(round(ctx.equity * max_notional_pct / current_close, 8)))
+                if qty > max_qty:
+                    qty = max_qty
+
+            if qty <= 0:
+                return []
+
             stop_price = Decimal(str(round(current_close - stop_distance, 8)))
 
             return [Intent(

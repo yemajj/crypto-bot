@@ -15,6 +15,7 @@ strategy:
     slow: 50
     risk_per_trade_pct: 0.005   # 0.5% of equity per trade
     atr_window: 14
+    max_position_notional_pct: 0.09  # clip notional to stay under 10% risk-cap
 
 risk:
   max_position_pct: 0.10        # 10% of equity in any single position

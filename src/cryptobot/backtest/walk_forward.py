@@ -4,25 +4,38 @@ Splits a bar series into N equal-width rolling folds. For each fold, runs a
 fresh BacktestEngine on the in-sample window, then on the out-of-sample window,
 and returns the paired results.
 
-Constraints (v1):
-  - Single strategy, single symbol.
-  - No parameter tuning or optimization — the same strategy params are used for
-    every fold, matching what you configured in your YAML.
-  - No journal writes — walk-forward is a research tool, not a live run.
+Two entry points:
+
+``run_walk_forward`` — fixed params (no optimisation):
+    Same strategy params for every fold, matching what you configured in YAML.
+
+``run_optimised_walk_forward`` — per-fold parameter grid search:
+    For each fold, runs all grid combinations on the in-sample window, selects
+    the best Sharpe, then validates those params on the out-of-sample window.
+    Returns ``OptimisedFoldResult`` which extends ``FoldResult`` with the chosen
+    params and in-sample Sharpe.
+
+Neither entry point writes to the journal — walk-forward is a research tool.
 
 Typical usage:
     bars = load_bars_from_csv(path, symbol, timeframe)
     results = run_walk_forward(settings, bars, folds=5, in_sample_pct=0.7)
     print_walk_forward_report(results, symbol, timeframe)
+
+    grid = ParamGrid({"fast": [10, 15, 20], "slow": [40, 50, 60]})
+    opt_results = run_optimised_walk_forward(settings, bars, grid, folds=5)
+    print_optimised_walk_forward_report(opt_results, symbol, timeframe)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from cryptobot.backtest.engine import BacktestEngine, BacktestResult
 from cryptobot.backtest.metrics import Metrics
+from cryptobot.backtest.param_grid import ParamGrid
 from cryptobot.config.settings import Settings
 from cryptobot.core.ids import new_run_id
 from cryptobot.core.types import Bar
@@ -133,6 +146,145 @@ def run_walk_forward(
     return results
 
 
+@dataclass
+class OptimisedFoldResult(FoldResult):
+    """FoldResult extended with per-fold best params from grid search."""
+
+    best_params: dict[str, Any] = None          # type: ignore[assignment]
+    best_in_sample_sharpe: float = 0.0
+
+
+def run_optimised_walk_forward(
+    settings: Settings,
+    bars: list[Bar],
+    grid: ParamGrid,
+    folds: int = 5,
+    in_sample_pct: float = 0.7,
+) -> list[OptimisedFoldResult]:
+    """Walk-forward with per-fold parameter optimisation.
+
+    For each fold:
+      1. Run all grid combinations on the in-sample window.
+      2. Select the combination with the highest in-sample Sharpe.
+      3. Re-run those best params on the out-of-sample window.
+
+    Parameters
+    ----------
+    settings:
+        Base settings.  Strategy params are overridden per grid combination.
+    bars:
+        Complete historical bar series, sorted ascending.
+    grid:
+        ``ParamGrid`` defining which params to search over.
+    folds, in_sample_pct:
+        Same semantics as ``run_walk_forward``.
+    """
+    if folds < 2:
+        raise ValueError(f"folds must be >= 2, got {folds}")
+    if not (0.1 <= in_sample_pct <= 0.9):
+        raise ValueError(f"in_sample_pct must be between 0.1 and 0.9, got {in_sample_pct}")
+
+    min_bars = folds * 10
+    if len(bars) < min_bars:
+        raise ValueError(
+            f"Need at least {min_bars} bars for {folds} folds, got {len(bars)}."
+            " Provide more historical data or reduce --folds."
+        )
+
+    window = len(bars) // folds
+    in_size = max(2, int(window * in_sample_pct))
+    out_size = window - in_size
+
+    if out_size < 1:
+        raise ValueError(
+            f"Out-of-sample window is 0 bars (window={window}, in_sample_pct={in_sample_pct})."
+            " Reduce --in-sample-pct or increase --folds."
+        )
+
+    results: list[OptimisedFoldResult] = []
+    for fold_idx in range(folds):
+        start = fold_idx * window
+        in_bars = bars[start : start + in_size]
+        out_bars = bars[start + in_size : start + window]
+
+        if len(in_bars) < 2 or len(out_bars) < 1:
+            continue
+
+        best_params, best_sharpe = grid.best_params(
+            base_settings=settings,
+            bars=in_bars,
+            run_fold_fn=_run_fold,
+        )
+
+        # Re-run best params on in-sample for reporting, then on out-of-sample
+        from cryptobot.backtest.param_grid import _override_strategy_params
+        best_settings = _override_strategy_params(settings, best_params)
+        in_result = _run_fold(best_settings, in_bars, run_id=new_run_id("wfopt"))
+        out_result = _run_fold(best_settings, out_bars, run_id=new_run_id("wfopt"))
+
+        results.append(OptimisedFoldResult(
+            fold=fold_idx + 1,
+            in_sample_start=in_bars[0].ts_open,
+            in_sample_end=in_bars[-1].ts_open,
+            out_sample_start=out_bars[0].ts_open,
+            out_sample_end=out_bars[-1].ts_open,
+            in_sample_bars=len(in_bars),
+            out_sample_bars=len(out_bars),
+            in_sample=in_result,
+            out_sample=out_result,
+            best_params=best_params,
+            best_in_sample_sharpe=best_sharpe,
+        ))
+
+    if not results:
+        raise ValueError("No valid folds produced — bars list may be too short.")
+
+    return results
+
+
+def print_optimised_walk_forward_report(
+    results: list[OptimisedFoldResult],
+    symbol: str,
+    timeframe: str,
+) -> None:
+    """Print a formatted optimised walk-forward summary to stdout."""
+    sep = "=" * 84
+    thin = "-" * 84
+
+    print(f"\n{sep}")
+    print(f"  OPTIMISED WALK-FORWARD  {symbol}  {timeframe}  ({len(results)} folds)")
+    print(sep)
+    print(
+        f"  {'Fold':>4}  {'Window':^23}  "
+        f"{'Sharpe':>7}  {'Sortino':>7}  {'MaxDD':>7}  {'WinRate':>8}  {'Trades':>6}  {'Return':>8}"
+    )
+
+    for r in results:
+        params_str = " ".join(f"{k}={v}" for k, v in sorted(r.best_params.items()))
+        _print_fold_row("IN ", r.fold, r.in_sample_start, r.in_sample_end, r.in_sample.metrics)
+        _print_fold_row("OUT", r.fold, r.out_sample_start, r.out_sample_end, r.out_sample.metrics)
+        print(f"  {'':>4}  {'best: ' + params_str}")
+        print(thin)
+
+    out_metrics = [r.out_sample.metrics for r in results]
+    mean_sharpe = _mean(m.sharpe for m in out_metrics)
+    mean_sortino = _mean(min(m.sortino, 99.0) for m in out_metrics)
+    mean_dd = _mean(m.max_drawdown for m in out_metrics)
+    mean_wr = _mean(m.hit_rate for m in out_metrics)
+    total_trades = sum(m.n_trades for m in out_metrics)
+    mean_ret = _mean(m.total_return for m in out_metrics)
+    mean_calmar = _mean(m.calmar for m in out_metrics)
+    max_consec_loss = max((m.max_consecutive_losses for m in out_metrics), default=0)
+
+    print(
+        f"  {'':>4}  {'OUT-OF-SAMPLE MEAN':^23}  "
+        f"  {mean_sharpe:>6.2f}  {mean_sortino:>6.2f}  {-mean_dd * 100:>6.1f}%"
+        f"  {mean_wr * 100:>7.1f}%  {total_trades:>6d}  {mean_ret * 100:>+7.1f}%"
+    )
+    print(f"  {'':>4}  {'Calmar (mean)':^23}  {mean_calmar:>6.2f}  |  Max consec. losses: {max_consec_loss}")
+    print(f"{sep}\n")
+
+
 def _run_fold(settings: Settings, bars: list[Bar], run_id: str) -> BacktestResult:
     """Assemble a fresh engine for a single fold and run it.
 
@@ -179,15 +331,15 @@ def print_walk_forward_report(
     timeframe: str,
 ) -> None:
     """Print a formatted walk-forward summary to stdout."""
-    sep = "=" * 72
-    thin = "-" * 72
+    sep = "=" * 84
+    thin = "-" * 84
 
     print(f"\n{sep}")
     print(f"  WALK-FORWARD  {symbol}  {timeframe}  ({len(results)} folds)")
     print(sep)
     print(
         f"  {'Fold':>4}  {'Window':^23}  "
-        f"{'Sharpe':>7}  {'MaxDD':>7}  {'WinRate':>8}  {'Trades':>6}  {'Return':>8}"
+        f"{'Sharpe':>7}  {'Sortino':>7}  {'MaxDD':>7}  {'WinRate':>8}  {'Trades':>6}  {'Return':>8}"
     )
 
     for r in results:
@@ -198,16 +350,20 @@ def print_walk_forward_report(
     # Summary row: mean of out-of-sample metrics across folds.
     out_metrics = [r.out_sample.metrics for r in results]
     mean_sharpe = _mean(m.sharpe for m in out_metrics)
+    mean_sortino = _mean(min(m.sortino, 99.0) for m in out_metrics)  # cap sentinel for averaging
     mean_dd = _mean(m.max_drawdown for m in out_metrics)
     mean_wr = _mean(m.hit_rate for m in out_metrics)
     total_trades = sum(m.n_trades for m in out_metrics)
     mean_ret = _mean(m.total_return for m in out_metrics)
+    mean_calmar = _mean(m.calmar for m in out_metrics)
+    max_consec_loss = max((m.max_consecutive_losses for m in out_metrics), default=0)
 
     print(
         f"  {'':>4}  {'OUT-OF-SAMPLE MEAN':^23}  "
-        f"  {mean_sharpe:>6.2f}  {-mean_dd * 100:>6.1f}%"
+        f"  {mean_sharpe:>6.2f}  {mean_sortino:>6.2f}  {-mean_dd * 100:>6.1f}%"
         f"  {mean_wr * 100:>7.1f}%  {total_trades:>6d}  {mean_ret * 100:>+7.1f}%"
     )
+    print(f"  {'':>4}  {'Calmar (mean)':^23}  {mean_calmar:>6.2f}  |  Max consec. losses: {max_consec_loss}")
     print(f"{sep}\n")
 
 
@@ -218,10 +374,11 @@ def _print_fold_row(
     end: datetime,
     m: Metrics,
 ) -> None:
-    window = f"{start.strftime('%Y-%m-%d')} → {end.strftime('%Y-%m-%d')}"
+    window = f"{start.strftime('%Y-%m-%d')} -> {end.strftime('%Y-%m-%d')}"
+    sortino_str = " 999+" if m.sortino >= 999 else f"{m.sortino:>6.2f}"
     print(
         f"  {fold:>3}{label}  {window:<23}  "
-        f"  {m.sharpe:>6.2f}  {-m.max_drawdown * 100:>6.1f}%"
+        f"  {m.sharpe:>6.2f}  {sortino_str}  {-m.max_drawdown * 100:>6.1f}%"
         f"  {m.hit_rate * 100:>7.1f}%  {m.n_trades:>6d}  {m.total_return * 100:>+7.1f}%"
     )
 

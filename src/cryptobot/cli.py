@@ -57,10 +57,33 @@ def walk_forward(
     data: Path = typer.Option(..., exists=True, help="Path to OHLCV CSV file."),
     folds: int = typer.Option(5, help="Number of rolling folds."),
     in_sample_pct: float = typer.Option(0.7, help="Fraction of each fold used for in-sample."),
+    optimise: bool = typer.Option(False, "--optimise", help="Run per-fold parameter grid search."),
+    param_grid: str | None = typer.Option(
+        None,
+        "--param-grid",
+        help=(
+            'JSON dict of param -> list of values to search. '
+            'Example: \'{"fast": [10, 15, 20], "slow": [40, 50, 60]}\'. '
+            "Required when --optimise is set."
+        ),
+    ),
 ) -> None:
-    """Run a rolling walk-forward validation on a local OHLCV CSV file."""
-    from cryptobot.backtest.walk_forward import print_walk_forward_report, run_walk_forward
+    """Run a rolling walk-forward validation on a local OHLCV CSV file.
+
+    Without --optimise: uses fixed params from the config YAML for all folds.
+
+    With --optimise: for each fold, runs all combinations from --param-grid on
+    the in-sample window, selects the best Sharpe, then validates on out-of-sample.
+    """
+    import json
+
     from cryptobot.app.run_backtest import load_bars_from_csv
+    from cryptobot.backtest.walk_forward import (
+        print_optimised_walk_forward_report,
+        print_walk_forward_report,
+        run_optimised_walk_forward,
+        run_walk_forward,
+    )
 
     settings = load_settings(config)
     symbol = settings.run.market.symbols[0]
@@ -68,15 +91,48 @@ def walk_forward(
 
     typer.echo(f"Loading bars from {data} …")
     bars = load_bars_from_csv(data, symbol, timeframe)
-    typer.echo(f"Loaded {len(bars):,} bars. Running {folds}-fold walk-forward …")
+    typer.echo(f"Loaded {len(bars):,} bars.")
 
-    try:
-        results = run_walk_forward(settings, bars, folds=folds, in_sample_pct=in_sample_pct)
-    except ValueError as exc:
-        typer.echo(f"error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+    if optimise:
+        if not param_grid:
+            typer.echo(
+                "error: --param-grid is required when --optimise is set.\n"
+                'Example: --param-grid \'{"fast": [10, 15, 20], "slow": [40, 50, 60]}\'',
+                err=True,
+            )
+            raise typer.Exit(code=1)
 
-    print_walk_forward_report(results, symbol, timeframe)
+        try:
+            grid_dict = json.loads(param_grid)
+        except json.JSONDecodeError as exc:
+            typer.echo(f"error: --param-grid is not valid JSON: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+        from cryptobot.backtest.param_grid import ParamGrid
+        grid = ParamGrid(grid_dict)
+        n_combos = len(grid.combinations())
+        typer.echo(
+            f"Running {folds}-fold optimised walk-forward "
+            f"({n_combos} combinations × {folds} folds = {n_combos * folds} backtest runs) …"
+        )
+        try:
+            results = run_optimised_walk_forward(
+                settings, bars, grid, folds=folds, in_sample_pct=in_sample_pct
+            )
+        except ValueError as exc:
+            typer.echo(f"error: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+        print_optimised_walk_forward_report(results, symbol, timeframe)
+    else:
+        typer.echo(f"Running {folds}-fold walk-forward …")
+        try:
+            results = run_walk_forward(settings, bars, folds=folds, in_sample_pct=in_sample_pct)
+        except ValueError as exc:
+            typer.echo(f"error: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+        print_walk_forward_report(results, symbol, timeframe)
 
 
 @app.command()
