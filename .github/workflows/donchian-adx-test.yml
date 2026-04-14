@@ -1,0 +1,279 @@
+# .github/workflows/donchian-adx-test.yml
+#
+# Side-by-side backtest: raw Donchian vs Donchian+ADX on BTC/USDT 15m.
+#
+# Verdict-first summary is written to the GitHub Actions job summary panel
+# (phone-readable).  Both result bundles are uploaded as separate artifacts.
+#
+# Decision rule applied automatically:
+#   Sharpe improved ≥ 0.3 AND Donchian+ADX Sharpe ≥ 0.5 AND trades ≥ 10
+#     → multi-symbol test recommended
+#   Otherwise → Opening Range Breakout recommended
+#   4h SMA stays parked as swing-mode candidate regardless.
+
+name: Donchian ADX Confirmation Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Start date (UTC, YYYY-MM-DD)'
+        required: true
+        default: '2023-01-01'
+      until:
+        description: 'End date (UTC, YYYY-MM-DD). Leave blank for today.'
+        required: false
+        default: ''
+      walk_forward:
+        description: 'Also run walk-forward validation (5 folds) for Donchian+ADX?'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      save_debug_artifacts:
+        description: 'Also save raw CSV, SQLite journal, and logs?'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Write .env
+        run: |
+          cat <<EOF > .env
+          CRYPTOBOT_ENV=backtest
+          CRYPTOBOT_LOG_LEVEL=INFO
+          EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME || 'binance' }}
+          EXCHANGE_API_KEY=
+          EXCHANGE_API_SECRET=
+          EXCHANGE_TESTNET=false
+          CRYPTOBOT_DB_URL=sqlite:///./data/cryptobot.sqlite
+          CRYPTOBOT_DATA_DIR=./data
+          CRYPTOBOT_LOG_DIR=./logs
+          CRYPTOBOT_KILL_SWITCH_FILE=./KILL_SWITCH
+          EOF
+
+      - name: Fetch historical bars (BTC/USDT 15m)
+        run: |
+          source .venv/bin/activate
+          UNTIL_ARG=""
+          if [ -n "${{ github.event.inputs.until }}" ]; then
+            UNTIL_ARG="--until ${{ github.event.inputs.until }}"
+          fi
+          cryptobot fetch-history \
+            --symbol "BTC/USDT" \
+            --timeframe "15m" \
+            --since "${{ github.event.inputs.since }}" \
+            $UNTIL_ARG
+
+      - name: Export to CSV
+        run: |
+          source .venv/bin/activate
+          cryptobot export-csv \
+            --symbol "BTC/USDT" \
+            --timeframe "15m" \
+            --out "data/BTC_USDT_15m.csv"
+          echo "CSV_PATH=data/BTC_USDT_15m.csv" >> "$GITHUB_ENV"
+
+      - name: Initialize journal DB
+        run: |
+          source .venv/bin/activate
+          cryptobot init-db
+
+      # -----------------------------------------------------------------------
+      # Run 1: raw Donchian baseline
+      # -----------------------------------------------------------------------
+      - name: Run raw Donchian backtest
+        run: |
+          source .venv/bin/activate
+          mkdir -p results/donchian/
+          cp config/backtest_donchian_15m.yaml results/donchian/config_used.yaml
+          cryptobot backtest \
+            --config config/backtest_donchian_15m.yaml \
+            --data "${{ env.CSV_PATH }}" \
+            --out-dir results/donchian/
+
+      # -----------------------------------------------------------------------
+      # Run 2: Donchian + ADX confirmation gate
+      # -----------------------------------------------------------------------
+      - name: Run Donchian+ADX backtest
+        run: |
+          source .venv/bin/activate
+          mkdir -p results/donchian_adx/
+          cp config/backtest_donchian_adx_15m.yaml results/donchian_adx/config_used.yaml
+          cryptobot backtest \
+            --config config/backtest_donchian_adx_15m.yaml \
+            --data "${{ env.CSV_PATH }}" \
+            --out-dir results/donchian_adx/
+
+      # -----------------------------------------------------------------------
+      # Verdict-first comparison → $GITHUB_STEP_SUMMARY
+      # -----------------------------------------------------------------------
+      - name: Generate comparison summary
+        if: always()
+        run: |
+          source .venv/bin/activate
+          python - <<'PYEOF'
+          import json, os, sys
+
+          def load(path):
+              try:
+                  with open(path) as f:
+                      return json.load(f)
+              except FileNotFoundError:
+                  return None
+
+          a = load("results/donchian/metrics.json")
+          b = load("results/donchian_adx/metrics.json")
+
+          if a is None or b is None:
+              msg = "## Donchian ADX Test\n\n> One or both backtests failed — no metrics to compare.\n"
+              summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stderr")
+              with open(summary_path, "a") as f:
+                  f.write(msg)
+              print(msg)
+              sys.exit(0)
+
+          def pct(v):
+              sign = "+" if v >= 0 else ""
+              return f"{sign}{v:.2f}%"
+
+          def num(v):
+              sign = "+" if v >= 0 else ""
+              return f"{sign}{v:.2f}"
+
+          def dd_row(a_dd, b_dd):
+              """Drawdown rows — lower is better, so delta sign is inverted."""
+              delta = a_dd - b_dd   # positive = ADX reduced drawdown (good)
+              sign = "+" if delta >= 0 else ""
+              return f"-{a_dd:.2f}%", f"-{b_dd:.2f}%", f"{sign}{delta:.2f}pp"
+
+          # Decision rule
+          sharpe_delta = b["sharpe"] - a["sharpe"]
+          if b["sharpe"] >= 0.5 and b["n_trades"] >= 10 and sharpe_delta >= 0.3:
+              decision = (
+                  "**ADX gate materially improves OOS quality.**  "
+                  "→ Next step: small multi-symbol test."
+              )
+          elif b["sharpe"] > a["sharpe"]:
+              decision = (
+                  "**ADX gate shows improvement but Sharpe is still below 0.5.**  "
+                  "→ Consider Opening Range Breakout as the next candidate."
+              )
+          else:
+              decision = (
+                  "**ADX gate does not fix raw Donchian failure.**  "
+                  "→ Next step: Opening Range Breakout."
+              )
+
+          a_dd_s, b_dd_s, dd_delta = dd_row(a["max_drawdown_pct"], b["max_drawdown_pct"])
+
+          md = f"""# Donchian + ADX Confirmation — BTC/USDT 15m
+
+> **{b["verdict"]}**
+
+**Period:** {b["date_from"]} → {b["date_to"]} | {b["n_bars"]:,} bars
+
+---
+
+## Verdict
+
+| Strategy | Verdict |
+|---|---|
+| Raw Donchian | {a["verdict"]} |
+| Donchian + ADX (gate ≥ 25) | {b["verdict"]} |
+
+---
+
+## Side-by-Side
+
+| Metric | Raw Donchian | Donchian + ADX | Δ |
+|---|---|---|---|
+| Total Return | {pct(a["total_return_pct"])} | {pct(b["total_return_pct"])} | {pct(b["total_return_pct"] - a["total_return_pct"])} |
+| Max Drawdown | {a_dd_s} | {b_dd_s} | {dd_delta} |
+| Sharpe | {a["sharpe"]:.2f} | {b["sharpe"]:.2f} | {num(sharpe_delta)} |
+| Sortino | {a["sortino"]:.2f} | {b["sortino"]:.2f} | {num(b["sortino"] - a["sortino"])} |
+| Trades | {a["n_trades"]} | {b["n_trades"]} | {num(b["n_trades"] - a["n_trades"])} |
+| Trades / Day | {a["trades_per_day"]} | {b["trades_per_day"]} | {num(b["trades_per_day"] - a["trades_per_day"])} |
+| Win Rate | {a["win_rate_pct"]:.1f}% | {b["win_rate_pct"]:.1f}% | {pct(b["win_rate_pct"] - a["win_rate_pct"])} |
+| Expectancy | ${a["expectancy_dollars"]:,.2f} | ${b["expectancy_dollars"]:,.2f} | ${b["expectancy_dollars"] - a["expectancy_dollars"]:,.2f} |
+| Profit Factor | {a["profit_factor"]:.2f} | {b["profit_factor"]:.2f} | {num(b["profit_factor"] - a["profit_factor"])} |
+| Total Fees | ${a["total_fees"]:,.2f} | ${b["total_fees"]:,.2f} | ${b["total_fees"] - a["total_fees"]:,.2f} |
+
+---
+
+## Decision
+
+{decision}
+
+> 4h SMA remains parked as a separate swing-mode candidate.
+"""
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stderr")
+          with open(summary_path, "a") as f:
+              f.write(md)
+          print(md)
+          PYEOF
+
+      # -----------------------------------------------------------------------
+      # Optional walk-forward for Donchian+ADX
+      # -----------------------------------------------------------------------
+      - name: Walk-forward validation (Donchian+ADX)
+        if: ${{ github.event.inputs.walk_forward == 'true' }}
+        run: |
+          source .venv/bin/activate
+          cryptobot walk-forward \
+            --config config/backtest_donchian_adx_15m.yaml \
+            --data "${{ env.CSV_PATH }}" \
+            --folds 5 \
+            --in-sample-pct 0.7
+
+      # -----------------------------------------------------------------------
+      # Artifacts
+      # -----------------------------------------------------------------------
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: donchian-adx-comparison-${{ github.run_id }}
+          path: results/
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Upload debug artifacts
+        if: ${{ always() && github.event.inputs.save_debug_artifacts == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: donchian-adx-debug-${{ github.run_id }}
+          path: |
+            data/*.csv
+            data/cryptobot.sqlite
+            logs/
+          retention-days: 14
+          if-no-files-found: warn
