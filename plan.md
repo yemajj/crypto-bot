@@ -248,6 +248,89 @@ Phase-6 live prerequisites (async fills, exchange precision, reconciliation) are
 
 ---
 
+# Current Direction Update
+
+## Summary of recent findings
+
+Recent strategy validation suggests the current framework should be kept, but the main day-trading strategy direction needs to change.
+
+### What has been learned
+- RSI mean reversion on BTC is a poor fit and should not be the main day-trading path
+- SMA crossover / current ensemble logic may still have some value as a lower-frequency swing-mode candidate, but not for the goal of a couple trades per day
+- Raw Donchian breakout on BTC 15m is directionally more sensible than RSI, but still has no edge in its current form
+- Donchian + ADX confirmation improved results versus raw Donchian, but still failed materially and should not be expanded further as the main day-trading path
+- The larger issue is that simple single-indicator BTC strategies are not producing a robust day-trading edge in the current validation setup
+
+## Core decision
+
+Do not restart the bot from scratch.
+
+Keep the current framework and continue iterating forward. The repo architecture remains useful. The problem is primarily in the strategy layer and validation results, not in the existence of the framework itself.
+
+## Strategy tracks going forward
+
+### Day mode
+Primary research focus is now a separate day-trading track.
+
+Current next candidate:
+- Opening Range Breakout (ORB)
+
+Reason:
+- more aligned with the goal of at least a couple trades per day
+- structurally different from the failed single-indicator tests
+- more tied to session behavior and market structure than simple threshold-based indicator triggers
+
+### Swing mode
+Keep 4h SMA as a parked swing-mode candidate.
+
+Reason:
+- it may still be useful as a lower-frequency overlay or separate mode
+- it does not fit the current day-trading frequency goal
+- it should not be the main research focus right now
+
+## Multi-symbol direction
+
+Multi-symbol expansion still makes sense in principle, but only after a strategy family shows credible edge on at least one symbol first.
+
+Do not use multi-symbol testing to rescue a strategy that is clearly losing on single-symbol validation.
+
+The intended order is:
+1. validate a promising strategy family on one symbol
+2. expand to a small basket
+3. evaluate portfolio-level trade frequency, drawdown, and symbol concentration
+4. only then consider broader deployment
+
+## Framework guidance
+
+Continue using the existing bot architecture.
+
+Do not copy an external framework wholesale.
+Do not add advanced complexity just because it sounds more sophisticated.
+Prioritize:
+- cleaner strategy logic
+- realistic validation
+- mode separation
+- reproducible research workflows
+- disciplined iteration
+
+## Immediate next step
+
+Implement and validate Opening Range Breakout (ORB) as the next day-mode candidate.
+
+Keep the GitHub Actions research workflow as the standard path for:
+- fetching/exporting real historical data
+- running backtests
+- reviewing verdict-first summaries remotely
+
+## Decision guardrails
+
+- no synthetic data for strategy validation
+- no curve fitting to rescue weak strategies
+- no multi-symbol scaling until single-symbol edge is credible
+- no restart unless the framework itself becomes the bottleneck
+
+---
+
 ## How to run
 
 ```bash
