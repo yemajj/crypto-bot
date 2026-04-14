@@ -209,6 +209,13 @@ class EnsembleStrategy(Strategy):
             stop_distance = atr * self._stop_multiplier
             current_close = float(ctx.history[-1].close)
             qty = self._allocator.allocate(result.final_score, regime, ctx.equity, atr)
+
+            # Cap notional to max_position_notional_pct of equity (avoids risk-rule rejections).
+            max_notional_pct = float(self.params.get("max_position_notional_pct", 1.0))
+            if current_close > 0:
+                max_qty = Decimal(str(round((ctx.equity * max_notional_pct) / current_close, 8)))
+                qty = min(qty, max_qty)
+
             stop_price = Decimal(str(round(current_close - stop_distance, 8)))
 
             reason = (
