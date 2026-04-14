@@ -45,9 +45,14 @@ def init_db_cmd() -> None:
 def backtest(
     config: Path = typer.Option(..., exists=True, help="Path to backtest YAML."),
     data: Path = typer.Option(..., exists=True, help="Path to OHLCV CSV file."),
+    out_dir: Path | None = typer.Option(
+        None,
+        "--out-dir",
+        help="Directory to write results bundle: metrics.json, trades.csv, summary.md.",
+    ),
 ) -> None:
     """Run a backtest from a local OHLCV CSV file."""
-    run_id = run_backtest.main(config, data)
+    run_id = run_backtest.main(config, data, out_dir=out_dir)
     typer.echo(f"backtest complete: run_id={run_id}")
 
 

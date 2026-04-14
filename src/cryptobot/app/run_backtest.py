@@ -137,10 +137,123 @@ def _parse_timestamp(raw: str) -> datetime:
 
 
 # ---------------------------------------------------------------------------
+# Result bundle writer
+# ---------------------------------------------------------------------------
+
+def write_result_bundle(
+    result: BacktestResult,
+    bars: list[Bar],
+    strategy_name: str,
+    out_dir: Path,
+) -> None:
+    """Write metrics.json, trades.csv, and summary.md to out_dir.
+
+    Designed for artifact upload — gives a phone-readable summary of every run
+    without needing to open the SQLite journal.
+    """
+    import csv as _csv
+    import json
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    m = result.metrics
+    symbol = bars[0].symbol
+    timeframe = bars[0].timeframe
+    date_from = bars[0].ts_open.strftime("%Y-%m-%d")
+    date_to = bars[-1].ts_open.strftime("%Y-%m-%d")
+    starting = result.equity_curve[0]
+    total_fees = sum(float(f.fee) for f in result.fills)
+
+    # ---- metrics.json ----
+    metrics_data = {
+        "run_id": result.run_id,
+        "strategy": strategy_name,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "date_from": date_from,
+        "date_to": date_to,
+        "n_bars": result.n_bars,
+        "starting_cash": round(starting, 2),
+        "final_equity": round(result.final_equity, 2),
+        "total_return_pct": round(m.total_return * 100, 3),
+        "max_drawdown_pct": round(m.max_drawdown * 100, 3),
+        "sharpe": round(m.sharpe, 4),
+        "sortino": round(m.sortino, 4),
+        "calmar": round(m.calmar, 4),
+        "profit_factor": round(m.profit_factor, 4),
+        "win_rate_pct": round(m.hit_rate * 100, 2),
+        "n_trades": m.n_trades,
+        "avg_trade_return_pct": round(m.avg_trade_return * 100, 4),
+        "time_in_market_pct": round(m.time_in_market_pct, 2),
+        "max_consecutive_losses": m.max_consecutive_losses,
+        "max_consecutive_wins": m.max_consecutive_wins,
+        "total_fees": round(total_fees, 2),
+    }
+    (out_dir / "metrics.json").write_text(json.dumps(metrics_data, indent=2))
+
+    # ---- trades.csv ----
+    # Build side lookup from strategy-submitted orders; stop-loss fills won't
+    # match (they're broker-internal) and are labelled "stop_sell".
+    order_side = {o.order_id: o.side.value for o in result.orders}
+    with (out_dir / "trades.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = _csv.writer(f)
+        writer.writerow(["ts", "symbol", "side", "price", "qty", "fee", "fee_currency"])
+        for fill in result.fills:
+            side = order_side.get(fill.order_id, "stop_sell")
+            writer.writerow([
+                fill.ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                symbol,
+                side,
+                str(fill.price),
+                str(fill.qty),
+                str(fill.fee),
+                fill.fee_currency,
+            ])
+
+    # ---- summary.md ----
+    ret_sign = "+" if m.total_return >= 0 else ""
+    avg_sign = "+" if m.avg_trade_return >= 0 else ""
+    md = f"""\
+# Backtest Summary
+
+**Run ID:** `{result.run_id}`
+**Strategy:** {strategy_name}
+**Symbol:** {symbol} {timeframe}
+**Period:** {date_from} → {date_to} ({result.n_bars:,} bars)
+**Starting cash:** ${starting:,.2f}
+
+## Returns
+
+| Metric | Value |
+|---|---|
+| Final Equity | ${result.final_equity:,.2f} |
+| Total Return | {ret_sign}{m.total_return * 100:.2f}% |
+| Max Drawdown | -{m.max_drawdown * 100:.2f}% |
+| Sharpe Ratio | {m.sharpe:.2f} |
+| Sortino Ratio | {m.sortino:.2f} |
+| Calmar Ratio | {m.calmar:.2f} |
+
+## Trading
+
+| Metric | Value |
+|---|---|
+| Closed Trades | {m.n_trades} |
+| Win Rate | {m.hit_rate * 100:.1f}% |
+| Profit Factor | {m.profit_factor:.2f} |
+| Avg Trade Return | {avg_sign}{m.avg_trade_return * 100:.3f}% |
+| Time in Market | {m.time_in_market_pct:.1f}% |
+| Max Consec. Losses | {m.max_consecutive_losses} |
+| Max Consec. Wins | {m.max_consecutive_wins} |
+| Total Fees Paid | ${total_fees:,.2f} |
+"""
+    (out_dir / "summary.md").write_text(md)
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def main(config_path: str | Path, data_path: str | Path | None = None) -> str:
+def main(config_path: str | Path, data_path: str | Path | None = None, out_dir: Path | None = None) -> str:
     settings = load_settings(config_path)
     run_id = new_run_id("bt")
     log = setup_logging(
@@ -225,6 +338,11 @@ def main(config_path: str | Path, data_path: str | Path | None = None) -> str:
     record_run_end(sf, run_id, notes=f"final_equity={result.final_equity:.2f}")
 
     _print_report(result, symbol, timeframe, bars, settings.run.fees.taker_bps)
+
+    if out_dir is not None:
+        write_result_bundle(result, bars, sc.name, Path(out_dir))
+        log.info("result_bundle_written", out_dir=str(out_dir))
+
     log.info(
         "backtest_complete",
         run_id=run_id,
