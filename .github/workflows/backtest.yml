@@ -123,12 +123,26 @@ jobs:
           source .venv/bin/activate
           cryptobot init-db
 
+      - name: Copy config snapshot
+        run: |
+          mkdir -p results/
+          cp "${{ github.event.inputs.config }}" results/config_used.yaml
+
       - name: Run backtest
         run: |
           source .venv/bin/activate
           cryptobot backtest \
             --config "${{ github.event.inputs.config }}" \
-            --data "${{ env.CSV_PATH }}"
+            --data "${{ env.CSV_PATH }}" \
+            --out-dir results/
+
+      - name: Print summary
+        if: always()
+        run: |
+          echo "===== summary.md ====="
+          cat results/summary.md || true
+          echo "===== metrics.json ====="
+          cat results/metrics.json || true
 
       - name: Run walk-forward validation
         if: ${{ github.event.inputs.walk_forward == 'true' }}
@@ -140,18 +154,13 @@ jobs:
             --folds 5 \
             --in-sample-pct 0.7
 
-      - name: Print journal report
-        if: always()
-        run: |
-          source .venv/bin/activate
-          cryptobot report || true
-
       - name: Upload results artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backtest-results-${{ github.run_id }}
           path: |
+            results/
             data/*.csv
             data/cryptobot.sqlite
             logs/
