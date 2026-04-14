@@ -1,0 +1,39 @@
+mode: backtest
+
+market:
+  symbols:
+    - BTC/USDT
+  timeframe: 15m
+
+strategy:
+  name: donchian_adx
+  params:
+    window: 20                   # identical to raw Donchian baseline (20 × 15m = 5h channel)
+    adx_window: 14               # standard Wilder period
+    adx_threshold: 25.0          # classic trending threshold — blocks ranging-market breakouts
+    atr_window: 14
+    risk_per_trade_pct: 0.005
+    stop_distance_multiplier: 1.5
+    buy_threshold: 0.5           # fires on score=+1.0 only
+    sell_threshold: -0.5         # fires on score=-1.0 only
+    max_position_notional_pct: 0.04
+
+risk:
+  max_position_pct: 0.05
+  max_gross_exposure_pct: 0.25
+  max_daily_loss_pct: 0.02
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+  max_open_positions: 1
+  cooldown_after_losses: 3
+  cooldown_bars: 6
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 50                  # 2×adx_window+1=29 minimum; 50 adds safe margin
