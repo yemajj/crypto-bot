@@ -2,9 +2,10 @@
 #
 # Fetch real OHLCV data and run a backtest (+ optional walk-forward validation).
 #
-# Self-contained: fetches data inline, so no prior fetch run is required.
-# Artifacts include the exact CSV used, the SQLite journal, and all logs —
-# everything needed to reproduce or inspect results from a phone.
+# Default artifact: results/ only (summary.md, metrics.json, trades.csv,
+# config_used.yaml) — small, fast to download, phone-readable.
+# Set save_debug_artifacts=true to also include the raw CSV, SQLite journal,
+# and structured logs for deeper local analysis.
 #
 # No API key is required — public OHLCV endpoints are unauthenticated.
 
@@ -49,6 +50,14 @@ on:
         default: ''
       walk_forward:
         description: 'Also run walk-forward validation (5 folds)?'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      save_debug_artifacts:
+        description: 'Also save raw CSV, SQLite journal, and logs? (larger download)'
         required: false
         default: 'false'
         type: choice
@@ -141,8 +150,6 @@ jobs:
         run: |
           echo "===== summary.md ====="
           cat results/summary.md || true
-          echo "===== metrics.json ====="
-          cat results/metrics.json || true
 
       - name: Run walk-forward validation
         if: ${{ github.event.inputs.walk_forward == 'true' }}
@@ -159,10 +166,19 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backtest-results-${{ github.run_id }}
+          path: results/
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Upload debug artifacts
+        if: ${{ always() && github.event.inputs.save_debug_artifacts == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-debug-${{ github.run_id }}
           path: |
-            results/
             data/*.csv
             data/cryptobot.sqlite
             logs/
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: warn
+
