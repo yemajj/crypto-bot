@@ -18,7 +18,7 @@ from decimal import Decimal
 from typing import Any
 
 from cryptobot.core.types import Intent, OrderType, Position, Side
-from cryptobot.strategy.base import Strategy, StrategyContext
+from cryptobot.strategy.base import Strategy, StrategyContext, _compute_adx
 from cryptobot.strategy.registry import register_strategy
 
 # Minimum qty guard — avoids dust orders; should match exchange minimum.
@@ -48,13 +48,15 @@ def _atr(bars: list, window: int) -> float:
     return sum(true_ranges) / len(true_ranges)
 
 
-def _parse_params(params: dict[str, Any]) -> tuple[int, int, int, float, float]:
+def _parse_params(params: dict[str, Any]) -> tuple[int, int, int, float, float, int, float]:
     fast = int(params.get("fast", 20))
     slow = int(params.get("slow", 50))
     atr_window = int(params.get("atr_window", 14))
     risk_pct = float(params.get("risk_per_trade_pct", 0.005))
     max_notional_pct = float(params.get("max_position_notional_pct", 1.0))
-    return fast, slow, atr_window, risk_pct, max_notional_pct
+    adx_window = int(params.get("adx_window", 14))
+    adx_threshold = float(params.get("adx_threshold", 0.0))  # 0 = disabled by default
+    return fast, slow, atr_window, risk_pct, max_notional_pct, adx_window, adx_threshold
 
 
 @register_strategy("sma_crossover")
@@ -64,11 +66,15 @@ class SmaCrossover(Strategy):
     name = "sma_crossover"
 
     def on_bar(self, ctx: StrategyContext) -> list[Intent]:
-        fast, slow, atr_window, risk_pct, max_notional_pct = _parse_params(ctx.params)
+        fast, slow, atr_window, risk_pct, max_notional_pct, adx_window, adx_threshold = (
+            _parse_params(ctx.params)
+        )
 
         # Need enough history: slow SMA needs `slow` bars, plus one prior bar
         # for crossover detection, plus `atr_window + 1` bars for ATR.
-        min_bars = max(slow, atr_window + 1) + 1
+        # ADX needs 2*adx_window + 1 bars when the filter is active.
+        adx_min = (2 * adx_window + 1) if adx_threshold > 0 else 0
+        min_bars = max(slow, atr_window + 1, adx_min) + 1
         if len(ctx.history) < min_bars:
             return []
 
@@ -87,6 +93,12 @@ class SmaCrossover(Strategy):
         bullish_crossover = (fast_prev <= slow_prev) and (fast_now > slow_now)
 
         if not in_position and bullish_crossover:
+            # ADX trend-strength filter: skip entry when trend is too weak.
+            if adx_threshold > 0:
+                adx = _compute_adx(ctx.history, adx_window)
+                if adx < adx_threshold:
+                    return []
+
             atr = _atr(ctx.history, atr_window)
             if atr <= 0 or close <= 0:
                 return []
