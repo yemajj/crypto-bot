@@ -188,6 +188,53 @@ def fetch_history(
     typer.echo(f"Done. {n:,} bars written to {settings.env.data_dir}")
 
 
+@app.command("export-csv")
+def export_csv(
+    symbol: str = typer.Option(..., help="Trading pair, e.g. BTC/USDT."),
+    timeframe: str = typer.Option("1h", help="Bar timeframe, e.g. 1h, 4h, 1d."),
+    out: Path = typer.Option(..., help="Output CSV path, e.g. data/BTCUSDT_1h.csv."),
+) -> None:
+    """Export bars from local BarStore cache to a backtest-compatible CSV file.
+
+    Run 'cryptobot fetch-history' first to populate the cache, then use this
+    command to produce a CSV for 'cryptobot backtest --data <file>'.
+
+    Output columns: open_time (Unix ms), open, high, low, close, volume.
+    Prices are written as decimal strings to preserve precision.
+    """
+    import csv as _csv
+
+    from cryptobot.data.storage import BarStore
+
+    settings = load_settings()
+    bar_store = BarStore(settings.env.data_dir)
+    bars = bar_store.read(symbol, timeframe)
+
+    if not bars:
+        typer.echo(
+            f"error: no cached bars found for {symbol} {timeframe}. "
+            "Run 'cryptobot fetch-history' first.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", newline="", encoding="utf-8") as f:
+        writer = _csv.writer(f)
+        writer.writerow(["open_time", "open", "high", "low", "close", "volume"])
+        for bar in bars:
+            writer.writerow([
+                int(bar.ts_open.timestamp() * 1000),
+                str(bar.open),
+                str(bar.high),
+                str(bar.low),
+                str(bar.close),
+                str(bar.volume),
+            ])
+
+    typer.echo(f"Exported {len(bars):,} bars → {out}")
+
+
 @app.command()
 def report(
     run_id: str | None = typer.Option(None, "--run-id", help="Run ID to report on (default: latest)."),
