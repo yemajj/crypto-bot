@@ -93,7 +93,7 @@ jobs:
           cat <<EOF > .env
           CRYPTOBOT_ENV=backtest
           CRYPTOBOT_LOG_LEVEL=INFO
-          EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME || 'binance' }}
+          EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME || 'bybit' }}
           EXCHANGE_API_KEY=
           EXCHANGE_API_SECRET=
           EXCHANGE_TESTNET=false
