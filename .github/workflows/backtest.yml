@@ -14,6 +14,16 @@ name: Run Backtest
 on:
   workflow_dispatch:
     inputs:
+      exchange:
+        description: 'Exchange for OHLCV data (must be CCXT-accessible from GitHub runners)'
+        required: false
+        default: 'kucoin'
+        type: choice
+        options:
+          - kucoin
+          - kraken
+          - gate
+          - okx
       config:
         description: 'Backtest config file'
         required: true
@@ -22,9 +32,9 @@ on:
         options:
           - config/backtest.yaml
           - config/backtest_rsi.yaml
-          - config/backtest_donchian.yaml
-          - config/backtest_donchian_4h.yaml
+          - config/backtest_donchian_15m.yaml
           - config/backtest_donchian_daily.yaml
+          - config/backtest_donchian_adx_15m.yaml
           - config/backtest_ensemble.yaml
       symbol:
         description: 'Trading pair (e.g. BTC/USDT)'
@@ -93,7 +103,7 @@ jobs:
           cat <<EOF > .env
           CRYPTOBOT_ENV=backtest
           CRYPTOBOT_LOG_LEVEL=INFO
-          EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME || 'bybit' }}
+          EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME || github.event.inputs.exchange || 'kucoin' }}
           EXCHANGE_API_KEY=
           EXCHANGE_API_SECRET=
           EXCHANGE_TESTNET=false
