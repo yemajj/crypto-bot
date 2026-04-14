@@ -16,6 +16,16 @@ name: Donchian ADX Confirmation Test
 on:
   workflow_dispatch:
     inputs:
+      exchange:
+        description: 'Exchange for OHLCV data (must be CCXT-accessible from GitHub runners)'
+        required: false
+        default: 'kucoin'
+        type: choice
+        options:
+          - kucoin
+          - kraken
+          - gate
+          - okx
       since:
         description: 'Start date (UTC, YYYY-MM-DD)'
         required: true
@@ -69,7 +79,7 @@ jobs:
           cat > .env <<'ENVEOF'
           CRYPTOBOT_ENV=backtest
           CRYPTOBOT_LOG_LEVEL=INFO
-          EXCHANGE_NAME=bybit
+          EXCHANGE_NAME=${{ github.event.inputs.exchange || 'kucoin' }}
           EXCHANGE_API_KEY=
           EXCHANGE_API_SECRET=
           EXCHANGE_TESTNET=false
