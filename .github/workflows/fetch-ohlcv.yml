@@ -1,0 +1,114 @@
+# .github/workflows/fetch-ohlcv.yml
+#
+# Fetch real OHLCV data from an exchange and upload as a CSV artifact.
+#
+# Use this to preview data quality or build a reference dataset before running
+# a full backtest. The resulting artifact is named ohlcv-<SYMBOL>-<TIMEFRAME>
+# and can be downloaded for local inspection or phone review.
+#
+# No API key is required — public OHLCV endpoints are unauthenticated.
+
+name: Fetch OHLCV Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Trading pair (e.g. BTC/USDT)'
+        required: true
+        default: 'BTC/USDT'
+      timeframe:
+        description: 'Bar timeframe'
+        required: true
+        default: '1h'
+        type: choice
+        options:
+          - 1h
+          - 4h
+          - 1d
+          - 15m
+      since:
+        description: 'Start date (UTC, YYYY-MM-DD)'
+        required: true
+        default: '2023-01-01'
+      until:
+        description: 'End date (UTC, YYYY-MM-DD). Leave blank for today.'
+        required: false
+        default: ''
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Write .env
+        run: |
+          cat <<EOF > .env
+          CRYPTOBOT_ENV=backtest
+          CRYPTOBOT_LOG_LEVEL=INFO
+          EXCHANGE_NAME=${{ secrets.EXCHANGE_NAME || 'binance' }}
+          EXCHANGE_API_KEY=
+          EXCHANGE_API_SECRET=
+          EXCHANGE_TESTNET=false
+          CRYPTOBOT_DB_URL=sqlite:///./data/cryptobot.sqlite
+          CRYPTOBOT_DATA_DIR=./data
+          CRYPTOBOT_LOG_DIR=./logs
+          CRYPTOBOT_KILL_SWITCH_FILE=./KILL_SWITCH
+          EOF
+
+      - name: Fetch historical bars
+        run: |
+          source .venv/bin/activate
+          UNTIL_ARG=""
+          if [ -n "${{ github.event.inputs.until }}" ]; then
+            UNTIL_ARG="--until ${{ github.event.inputs.until }}"
+          fi
+          cryptobot fetch-history \
+            --symbol "${{ github.event.inputs.symbol }}" \
+            --timeframe "${{ github.event.inputs.timeframe }}" \
+            --since "${{ github.event.inputs.since }}" \
+            $UNTIL_ARG
+
+      - name: Export to CSV
+        run: |
+          source .venv/bin/activate
+          SYMBOL_SAFE=$(echo "${{ github.event.inputs.symbol }}" | tr '/' '_')
+          cryptobot export-csv \
+            --symbol "${{ github.event.inputs.symbol }}" \
+            --timeframe "${{ github.event.inputs.timeframe }}" \
+            --out "data/${SYMBOL_SAFE}_${{ github.event.inputs.timeframe }}.csv"
+
+      - name: Show CSV preview (first 5 rows)
+        run: |
+          SYMBOL_SAFE=$(echo "${{ github.event.inputs.symbol }}" | tr '/' '_')
+          CSV_FILE="data/${SYMBOL_SAFE}_${{ github.event.inputs.timeframe }}.csv"
+          echo "=== CSV preview: ${CSV_FILE} ==="
+          head -6 "${CSV_FILE}"
+          echo "..."
+          echo "Total rows: $(( $(wc -l < "${CSV_FILE}") - 1 )) bars"
+
+      - name: Upload OHLCV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ohlcv-${{ github.event.inputs.symbol == 'BTC/USDT' && 'BTCUSDT' || github.event.inputs.symbol }}-${{ github.event.inputs.timeframe }}-${{ github.run_id }}
+          path: data/*.csv
+          retention-days: 90
+          if-no-files-found: error
