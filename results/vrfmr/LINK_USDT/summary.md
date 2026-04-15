@@ -2,7 +2,7 @@
 
 > **Poor — lost 9.9% with Sharpe -2.01. No edge in this configuration.**
 
-**LINK/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T171322Z-de0ff1fd`
+**LINK/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T171635Z-21f88ba2`
 
 ---
 

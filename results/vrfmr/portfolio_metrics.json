@@ -40,7 +40,7 @@
   "per_symbol": [
     {
       "symbol": "BTC/USDT",
-      "run_id": "bt-20260415T170232Z-9feef8bf",
+      "run_id": "bt-20260415T170540Z-10aa0a6e",
       "total_return_pct": -10.32,
       "sharpe": -2.587,
       "max_drawdown_pct": 10.872,
@@ -51,7 +51,7 @@
     },
     {
       "symbol": "SOL/USDT",
-      "run_id": "bt-20260415T170802Z-bd4e94a1",
+      "run_id": "bt-20260415T171122Z-d4cdfbc0",
       "total_return_pct": 0.383,
       "sharpe": 0.071,
       "max_drawdown_pct": 4.977,
@@ -62,7 +62,7 @@
     },
     {
       "symbol": "LINK/USDT",
-      "run_id": "bt-20260415T171322Z-de0ff1fd",
+      "run_id": "bt-20260415T171635Z-21f88ba2",
       "total_return_pct": -9.936,
       "sharpe": -2.008,
       "max_drawdown_pct": 10.379,
