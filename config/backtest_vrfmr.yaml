@@ -1,0 +1,64 @@
+# Volatility-regime filtered mean reversion (VRFMR) backtest config
+#
+# Strategy: only enter mean-reversion trades (RSI oversold) when the market
+# is demonstrably non-trending (ADX < adx_threshold). Exit when the mean
+# reversion completes (RSI >= rsi_exit) or the regime flips to trending.
+#
+# Key structural difference from prior RSI failure (rsi.py):
+#   rsi.py fired in all conditions including downtrends, where RSI < 30
+#   repeatedly triggers on each new leg lower → string of losers.
+#   VRFMR uses ADX to gate entries to range-bound conditions only.
+#
+# Runner (uses existing multi-backtest — no new runner needed):
+#   CRYPTOBOT_LOG_LEVEL=WARNING cryptobot multi-backtest \
+#     --config config/backtest_vrfmr.yaml \
+#     --data-dir data/ \
+#     --out-dir results/vrfmr/
+#
+# Data files expected:
+#   data/BTC_USDT_1h.csv  data/SOL_USDT_1h.csv  data/LINK_USDT_1h.csv
+
+mode: backtest
+
+market:
+  symbols:
+    - BTC/USDT
+    - SOL/USDT
+    - LINK/USDT
+  timeframe: 1h
+
+strategy:
+  name: vrfmr
+  params:
+    adx_window: 14
+    adx_threshold: 25.0        # < 25 = range-bound, OK to trade
+    rsi_window: 14
+    rsi_oversold: 30.0         # entry trigger: oversold
+    rsi_exit: 50.0             # exit at mean (midpoint), not overbought
+    atr_window: 14
+    stop_distance_multiplier: 1.5
+    risk_per_trade_pct: 0.005
+    max_position_notional_pct: 0.08
+
+risk:
+  max_position_pct: 0.10
+  max_gross_exposure_pct: 0.30
+  max_daily_loss_pct: 0.03
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+    - SOL/USDT
+    - LINK/USDT
+  # max_open_positions=2: all three symbols trade independently but cap
+  # simultaneous exposure. Adjusted from 3 per initial validation plan.
+  max_open_positions: 2
+  cooldown_after_losses: 0  # keep off for clean first pass
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 30               # covers ADX warmup: 2*14+1 = 29 bars
