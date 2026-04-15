@@ -1,0 +1,75 @@
+{
+  "strategy": "vrfmr",
+  "timeframe": "1h",
+  "date_from": "2023-01-01",
+  "date_to": "2025-04-14",
+  "basket": [
+    "BTC/USDT",
+    "SOL/USDT",
+    "LINK/USDT"
+  ],
+  "starting_cash_per_symbol": 10000.0,
+  "portfolio_avg_return_pct": -6.624,
+  "portfolio_sharpe": -2.108,
+  "portfolio_max_drawdown_pct": 7.2,
+  "portfolio_win_rate_pct": 41.65,
+  "total_trades": 1042,
+  "trades_per_day": 1.249,
+  "total_fees": 1615.02,
+  "dominant_symbol": "SOL/USDT",
+  "dominant_pct": 100.0,
+  "avg_pairwise_correlation": 0.008,
+  "correlation_matrix": {
+    "BTC/USDT": {
+      "BTC/USDT": 1.0,
+      "SOL/USDT": 0.004,
+      "LINK/USDT": 0.014
+    },
+    "SOL/USDT": {
+      "BTC/USDT": 0.004,
+      "SOL/USDT": 1.0,
+      "LINK/USDT": 0.004
+    },
+    "LINK/USDT": {
+      "BTC/USDT": 0.014,
+      "SOL/USDT": 0.004,
+      "LINK/USDT": 1.0
+    }
+  },
+  "verdict": "weak \u2014 portfolio Sharpe -2.11, -6.6% avg return, 42% win rate. Strategy family not good enough at portfolio level.",
+  "per_symbol": [
+    {
+      "symbol": "BTC/USDT",
+      "run_id": "bt-20260415T170232Z-9feef8bf",
+      "total_return_pct": -10.32,
+      "sharpe": -2.587,
+      "max_drawdown_pct": 10.872,
+      "win_rate_pct": 40.75,
+      "n_trades": 346,
+      "pnl": -1031.99,
+      "total_fees": 522.89
+    },
+    {
+      "symbol": "SOL/USDT",
+      "run_id": "bt-20260415T170802Z-bd4e94a1",
+      "total_return_pct": 0.383,
+      "sharpe": 0.071,
+      "max_drawdown_pct": 4.977,
+      "win_rate_pct": 45.3,
+      "n_trades": 351,
+      "pnl": 38.27,
+      "total_fees": 567.11
+    },
+    {
+      "symbol": "LINK/USDT",
+      "run_id": "bt-20260415T171322Z-de0ff1fd",
+      "total_return_pct": -9.936,
+      "sharpe": -2.008,
+      "max_drawdown_pct": 10.379,
+      "win_rate_pct": 38.84,
+      "n_trades": 345,
+      "pnl": -993.61,
+      "total_fees": 525.02
+    }
+  ]
+}

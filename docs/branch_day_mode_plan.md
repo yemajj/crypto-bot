@@ -118,6 +118,58 @@ Merge into main only if:
 
 Otherwise, keep as a research branch or discard.
 
+## Research Log
+
+### XSMOM — Cross-Sectional Rate-of-Change Momentum (COMPLETED, WEAK)
+
+Implementation: `src/cryptobot/strategy/xsmom.py`, `src/cryptobot/app/run_xsmom_backtest.py`
+
+Architecture: one shared strategy instance maintains `_roc_cache` (symbol → N-bar RoC) across all symbols. Symbols ranked by RoC percentile each bar. Buy top tier (rank ≥ 0.66) with positive absolute momentum. Exit on `roc < 0` (primary) or bottom-third rank (secondary). ATR-based stop sizing.
+
+| Run | Timeframe | Lookback | Trades/day | Win rate | Sharpe | Avg return | Fees |
+|-----|-----------|----------|------------|----------|--------|------------|------|
+| 15m | 15m | 20 bars (5h) | 13.3 | 16.5% | -15.07 | -68.1% | $15,325 |
+| 1h  | 1h  | 20 bars (20h) | 2.5  | 29.3% | -2.30  | -12.84% | $3,114 |
+
+**Verdict: WEAK on both timeframes.**
+
+The 15m result failed primarily due to fee drag (5h window → 13 trades/day → $15k fees on $30k capital). The 1h result isolates the signal: even with modest fee drag ($3.1k on $30k), gross P&L before fees is near-zero or negative. Win rate of 29% is well below breakeven. The ranking signal itself has no positive expectancy on this basket/period.
+
+**Conclusion: abandon XSMOM. Do not tune parameters. Signal family does not work.**
+
+### VRFMR — Volatility-Regime Filtered Mean Reversion (COMPLETED, WEAK)
+
+Implementation: `src/cryptobot/strategy/vrfmr.py`, config `config/backtest_vrfmr.yaml`
+
+Architecture: ADX < 25 gates entries to range-bound conditions only. RSI < 30 triggers BUY with ATR-based stop. Exit at RSI ≥ 50 (mean reversion complete) or ADX ≥ 25 (regime flip). Per-symbol; no shared state. Runner: existing `cryptobot multi-backtest`.
+
+| Symbol | Return | Sharpe | Win Rate | Trades | Gross P&L (before fees) |
+|--------|--------|--------|----------|--------|------------------------|
+| BTC/USDT | -10.3% | -2.59 | 41% | 346 | -$509 |
+| SOL/USDT | +0.4% | 0.07 | 45% | 351 | **+$605** |
+| LINK/USDT | -9.9% | -2.01 | 39% | 345 | -$469 |
+| **Portfolio** | **-6.6%** | **-2.11** | **41.6%** | **1,042** | **Total fees: $1,615** |
+
+**Verdict: WEAK at portfolio level.**
+
+However, this is the most informative negative result so far:
+- **Win rate 41.6%** — highest of any strategy tested; within striking distance of breakeven
+- **Fees are not the problem** — $1,615 on $30k capital (5.4% drag), far below XSMOM's 51%
+- **SOL has a positive gross signal**: +$605 before fees → the ADX regime gate is working for SOL
+- **BTC and LINK are dragging**: gross P&L negative on both; the regime filter does not isolate clean range-bound periods for these symbols on this dataset
+- **One symbol dominates**: SOL contributes 100% of positive PnL — diversification benefit is absent
+
+**Conclusion: VRFMR has a partial signal (SOL) but does not generalize across the basket. Do not tune parameters. The structural question is whether BTC/LINK are simply less range-bound in this dataset or whether the regime detection is miscalibrated for those volatility profiles.**
+
+### Next Candidates
+
+If continuing day-mode research, structurally different directions to consider:
+
+- **Volume-surge breakout**: enter when volume spikes N× the rolling average AND price breaks recent range; volume is the confirmation rather than a price indicator. Structurally different from Donchian (no volume gate before).
+- **Time-of-day filtered ORB variant**: narrow the ORB entry window, add a volume confirmation gate, and filter to specific session hours known to have directional bias. Different from the previous ORB failure (broader window, no volume filter).
+
+---
+
 ## How to Use This File
 
 At the start of each Claude session:

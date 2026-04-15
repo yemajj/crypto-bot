@@ -1,0 +1,66 @@
+# Cross-sectional momentum (XSMOM) backtest config — 1h timeframe
+#
+# Strategy: hold the top-ranked symbol by 20h rate-of-change while its
+# absolute momentum is positive.  Exit on negative momentum (roc < 0)
+# or bottom-third relative rank.
+#
+# Basket size note (top-1 rotation):
+#   With 3 symbols the discrete ranks are {0.33, 0.67, 1.00}.
+#   top_pct=0.34 sets the buy threshold at 0.66, which admits up to 2
+#   symbols (ranks 0.67 and 1.00).  max_open_positions=1 caps the active
+#   position count to one, making this a top-1 rotation test.
+#
+# Lookback note:
+#   20 bars × 1h = 20h momentum window — the originally designed lookback.
+#   Compare with backtest_xsmom.yaml (15m) where 20 bars = 5h → too short,
+#   too many trades, catastrophic fee drag.
+#
+# Runner:
+#   python -m cryptobot.app.run_xsmom_backtest \
+#     config/backtest_xsmom_1h.yaml --data-dir data/ --out-dir results/xsmom_1h/
+#
+# Data files expected:
+#   data/BTC_USDT_1h.csv  data/SOL_USDT_1h.csv  data/LINK_USDT_1h.csv
+
+mode: backtest
+
+market:
+  symbols:
+    - BTC/USDT
+    - SOL/USDT
+    - LINK/USDT
+  timeframe: 1h
+
+strategy:
+  name: xsmom
+  params:
+    lookback: 20              # 20h momentum window (20 × 1h bars)
+    top_pct: 0.34             # buy rank >= 0.66 (top tier)
+    bottom_exit_pct: 0.34     # exit rank < 0.34 (bottom tier); roc<0 is primary exit
+    min_symbols: 2            # require at least 2 symbols in cache before ranking
+    atr_window: 14
+    risk_per_trade_pct: 0.005
+    stop_distance_multiplier: 1.5
+    max_position_notional_pct: 0.08
+
+risk:
+  max_position_pct: 0.10
+  max_gross_exposure_pct: 0.30
+  max_daily_loss_pct: 0.03
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+    - SOL/USDT
+    - LINK/USDT
+  # max_open_positions=1: enforces top-1 rotation.
+  max_open_positions: 1
+  cooldown_after_losses: 0  # cooldown not tracked by run_xsmom_backtest; keep off
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 24
