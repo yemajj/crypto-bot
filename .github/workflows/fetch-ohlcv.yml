@@ -87,10 +87,14 @@ jobs:
             --since "${{ github.event.inputs.since }}" \
             $UNTIL_ARG
 
+      - name: Compute safe symbol name
+        id: safe_symbol
+        run: echo "value=$(echo '${{ github.event.inputs.symbol }}' | tr '/' '_')" >> "$GITHUB_OUTPUT"
+
       - name: Export to CSV
         run: |
           source .venv/bin/activate
-          SYMBOL_SAFE=$(echo "${{ github.event.inputs.symbol }}" | tr '/' '_')
+          SYMBOL_SAFE="${{ steps.safe_symbol.outputs.value }}"
           cryptobot export-csv \
             --symbol "${{ github.event.inputs.symbol }}" \
             --timeframe "${{ github.event.inputs.timeframe }}" \
@@ -98,20 +102,17 @@ jobs:
 
       - name: Show CSV preview (first 5 rows)
         run: |
-          SYMBOL_SAFE=$(echo "${{ github.event.inputs.symbol }}" | tr '/' '_')
+          SYMBOL_SAFE="${{ steps.safe_symbol.outputs.value }}"
           CSV_FILE="data/${SYMBOL_SAFE}_${{ github.event.inputs.timeframe }}.csv"
           echo "=== CSV preview: ${CSV_FILE} ==="
           head -6 "${CSV_FILE}"
           echo "..."
           echo "Total rows: $(( $(wc -l < "${CSV_FILE}") - 1 )) bars"
 
-      - name: Set safe symbol
-        run: echo "SYMBOL_SAFE=$(echo '${{ github.event.inputs.symbol }}' | tr '/' '_')" >> $GITHUB_ENV
-
       - name: Upload OHLCV artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ohlcv-${{ env.SYMBOL_SAFE }}-${{ github.event.inputs.timeframe }}-${{ github.run_id }}
-          path: data/${{ env.SYMBOL_SAFE }}_${{ github.event.inputs.timeframe }}.csv
+          name: ohlcv-${{ steps.safe_symbol.outputs.value }}-${{ github.event.inputs.timeframe }}-${{ github.run_id }}
+          path: data/${{ steps.safe_symbol.outputs.value }}_${{ github.event.inputs.timeframe }}.csv
           retention-days: 90
           if-no-files-found: error

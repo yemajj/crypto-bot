@@ -25,12 +25,12 @@ market:
     - BTC/USDT
     - SOL/USDT
     - LINK/USDT
-  timeframe: 1h
+  timeframe: 15m
 
 strategy:
   name: xsmom
   params:
-    lookback: 20              # ~20h momentum window (< 1 day on 1h bars)
+    lookback: 20              # ~5h momentum window (20 × 15m bars)
     top_pct: 0.34             # buy rank >= 0.66 (top tier)
     bottom_exit_pct: 0.34     # exit rank < 0.34 (bottom tier); roc<0 is primary exit
     min_symbols: 2            # require at least 2 symbols in cache before ranking
