@@ -2,7 +2,7 @@
 
 > **Poor — lost 10.3% with Sharpe -2.59. No edge in this configuration.**
 
-**BTC/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T170232Z-9feef8bf`
+**BTC/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T170540Z-10aa0a6e`
 
 ---
 
