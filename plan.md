@@ -259,7 +259,11 @@ Recent strategy validation suggests the current framework should be kept, but th
 - SMA crossover / current ensemble logic may still have some value as a lower-frequency swing-mode candidate, but not for the goal of a couple trades per day
 - Raw Donchian breakout on BTC 15m is directionally more sensible than RSI, but still has no edge in its current form
 - Donchian + ADX confirmation improved results versus raw Donchian, but still failed materially and should not be expanded further as the main day-trading path
-- The larger issue is that simple single-indicator BTC strategies are not producing a robust day-trading edge in the current validation setup
+- ORB on 1h BTC failed: -5.4% total return, Sharpe -1.16, 26% win rate (624 trades). Too coarse — signal arrives 1 bar late
+- ORB on 5m BTC failed worse: -21.2% total return, Sharpe -6.06, 9.3% win rate (1826 trades). Too granular — noise dominates
+- Day-mode research is parked. ORB has no edge on BTC at either timeframe tested
+- Multi-symbol 4h SMA swing basket (BTC+ETH+SOL) produced portfolio Sharpe 0.94 — best result so far
+- Walk-forward OOS is inconclusive due to too few trades per fold (1-4); needs broader basket to get meaningful OOS statistics
 
 ## Core decision
 
@@ -273,12 +277,17 @@ Keep the current framework and continue iterating forward. The repo architecture
 Primary research focus is now a separate day-trading track.
 
 Current next candidate:
-- Opening Range Breakout (ORB)
+- Opening Range Breakout (ORB) on 5m bars
 
 Reason:
-- more aligned with the goal of at least a couple trades per day
+- ORB is a short-term intraday strategy by design; 1h bars are too coarse (signal arrives 1 bar late)
+- 5m bars give the strategy its intended resolution: 12-bar opening range = 1 hour, entry cutoff at bar 192 = 16:00 UTC
 - structurally different from the failed single-indicator tests
 - more tied to session behavior and market structure than simple threshold-based indicator triggers
+
+Status:
+- ORB 1h BTC: FAILED (-5.4% return, Sharpe -1.16, 26% win rate) — timeframe too coarse
+- ORB 5m BTC: IN PROGRESS — config at `config/backtest_orb_5m.yaml`, data at `data/BTC_USDT_5m_full.csv`
 
 ### Swing mode
 Keep 4h SMA as a parked swing-mode candidate.
@@ -315,7 +324,40 @@ Prioritize:
 
 ## Immediate next step
 
-Implement and validate Opening Range Breakout (ORB) as the next day-mode candidate.
+Multi-symbol swing-mode validation is now the active research path. Results so far:
+
+**Full-period basket backtest (SMA 20/50 4h, BTC+ETH+SOL):**
+- Portfolio Sharpe: 0.94 — best result produced in this project
+- Avg return: +5.0% equal-weight
+- Portfolio max drawdown: -2.0%
+- Per-symbol: BTC +5.5% (Sharpe 1.07), ETH -2.6% (Sharpe -0.68), SOL +12.1% (Sharpe 0.89)
+- Avg pairwise correlation: 0.04 (signals fire independently)
+- Dominant symbol: SOL (69% of positive PnL)
+
+**Walk-forward OOS (5 folds):**
+- BTC OOS mean Sharpe: +0.06 (3 total OOS trades — uninterpretable)
+- ETH OOS mean Sharpe: -1.74 (7 OOS trades)
+- SOL OOS mean Sharpe: -0.98 (6 OOS trades)
+- Root cause: too few trades per fold (1-4) for statistics to be meaningful
+
+**Verdict: mixed (inconclusive)** — full-period signal is the strongest we've seen, but trade
+sparsity (0.044 trades/day across 3 symbols) makes walk-forward uninterpretable. ETH
+is a consistent drag. SOL dominates gains.
+
+**Next validation steps (in priority order):**
+1. Expand basket to 5-6 symbols to increase trade frequency without changing strategy
+2. Drop ETH or replace with a better-performing alt (SOL, BNB, AVAX)
+3. Once basket produces > 20 OOS trades per fold, re-run walk-forward for a real read
+4. If OOS Sharpe holds > 0.5: proceed to paper trading this basket
+5. If OOS still negative at adequate trade count: abandon SMA family; try a genuinely different class
+
+```bash
+# Run multi-symbol basket backtest
+cryptobot multi-backtest --config config/backtest_swing_basket.yaml --data-dir data/ --out-dir results/swing_basket
+
+# Per-symbol walk-forward
+cryptobot walk-forward --config config/backtest_swing_basket.yaml --data data/BTC_USDT_4h.csv --folds 5
+```
 
 Keep the GitHub Actions research workflow as the standard path for:
 - fetching/exporting real historical data
