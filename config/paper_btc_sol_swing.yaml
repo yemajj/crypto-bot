@@ -1,0 +1,45 @@
+# BTC+SOL 4h swing paper-trading validation.
+# Strategy: SMA(20/50) + ADX(25) — identical params to the full-period backtest.
+# Purpose: real-time validation of the BTC+SOL basket edge before Phase 6.
+# Expect 0-2 signals per month. Do not adjust params mid-run.
+
+mode: paper
+
+market:
+  symbols:
+    - BTC/USDT
+    - SOL/USDT
+  timeframe: 4h
+
+strategy:
+  name: sma_crossover
+  params:
+    fast: 20
+    slow: 50
+    atr_window: 14
+    risk_per_trade_pct: 0.005
+    max_position_notional_pct: 0.09
+    adx_window: 14
+    adx_threshold: 25
+
+risk:
+  max_position_pct: 0.10
+  max_gross_exposure_pct: 0.20       # two symbols max; headroom keeps margin safe
+  max_daily_loss_pct: 0.02
+  max_orders_per_minute: 5
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+    - SOL/USDT
+  max_open_positions: 2              # one position per symbol at most
+  cooldown_after_losses: 3
+  cooldown_bars: 6
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 60                      # SMA(50) needs 50 bars; 60 gives a small buffer
+poll_interval_seconds: 60.0          # 4h bars — polling every 60s is sufficient

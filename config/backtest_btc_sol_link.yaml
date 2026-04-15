@@ -3,10 +3,8 @@ mode: backtest
 market:
   symbols:
     - BTC/USDT
-    - ETH/USDT
     - SOL/USDT
-    - BNB/USDT
-    - AVAX/USDT
+    - LINK/USDT
   timeframe: 4h
 
 strategy:
@@ -26,13 +24,10 @@ risk:
   max_daily_loss_pct: 0.02
   max_orders_per_minute: 10
   require_stop_loss: true
-  # symbol_allow_list is overridden per-symbol at runtime by the multi-backtest runner
   symbol_allow_list:
     - BTC/USDT
-    - ETH/USDT
     - SOL/USDT
-    - BNB/USDT
-    - AVAX/USDT
+    - LINK/USDT
   max_open_positions: 1
   cooldown_after_losses: 3
   cooldown_bars: 6
@@ -43,7 +38,4 @@ fees:
   slippage_bps: 5.0
 
 starting_cash: 10000.0
-
-# SMA(20,50) needs at least 51 bars to produce the first signal.
-# Warmup of 60 gives a small buffer above that minimum.
 warmup_bars: 60
