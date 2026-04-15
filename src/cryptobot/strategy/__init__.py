@@ -9,6 +9,7 @@ from cryptobot.strategy import sma_crossover  # noqa: F401
 from cryptobot.strategy import rsi  # noqa: F401
 from cryptobot.strategy import donchian  # noqa: F401
 from cryptobot.strategy import donchian_adx  # noqa: F401
+from cryptobot.strategy import orb  # noqa: F401
 from cryptobot.strategy import bollinger  # noqa: F401
 from cryptobot.strategy import volume_signal  # noqa: F401
 from cryptobot.strategy import ensemble  # noqa: F401

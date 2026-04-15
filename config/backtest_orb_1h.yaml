@@ -1,0 +1,56 @@
+mode: backtest
+
+market:
+  symbols:
+    - BTC/USDT
+  timeframe: 1h
+
+strategy:
+  name: orb
+  params:
+    # Session definition: UTC midnight (00:00) starts each day.
+    # Opening range = first 2 bars of the UTC day (00:00 – 02:00).
+    orb_bars: 2
+
+    # Entry cutoff: bar 16 of the session = 16:00 UTC.
+    # No new positions opened after this point in the day.
+    max_entry_bar: 16
+
+    # Volume confirmation: disabled for clean baseline.
+    # Set to true to require above-average volume on the breakout bar.
+    volume_confirm: false
+    volume_window: 20
+
+    # Stop-loss sizing (inherited from ScoringStrategy.on_bar).
+    atr_window: 14
+    risk_per_trade_pct: 0.005
+    stop_distance_multiplier: 1.5
+    max_position_notional_pct: 0.05
+
+    # Score thresholds: ORB scores only {-1.0, 0.0, +1.0}, so 0.5 fires on
+    # a clean breakout and ignores any partial signal.
+    buy_threshold: 0.5
+    sell_threshold: -0.5
+
+risk:
+  max_position_pct: 0.05
+  max_gross_exposure_pct: 0.25
+  max_daily_loss_pct: 0.02
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+  max_open_positions: 1
+  cooldown_after_losses: 3
+  cooldown_bars: 6
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+
+# 48 bars = 2 full UTC days.  Provides enough history for ATR seeding and
+# ensures the session-isolation logic has prior-day bars to correctly partition.
+warmup_bars: 48

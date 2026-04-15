@@ -263,7 +263,7 @@ def write_result_bundle(
 
 > **{verdict}**
 
-**{symbol} {timeframe}** | {date_from} → {date_to} | {result.n_bars:,} bars | `{result.run_id}`
+**{symbol} {timeframe}** | {date_from} -> {date_to} | {result.n_bars:,} bars | `{result.run_id}`
 
 ---
 
@@ -295,6 +295,59 @@ def write_result_bundle(
 | Total Fees Paid | ${total_fees:,.2f} |
 """
     (out_dir / "summary.md").write_text(md)
+
+
+# ---------------------------------------------------------------------------
+# Engine runner (reused by run_multi_backtest)
+# ---------------------------------------------------------------------------
+
+def _run_symbol(
+    settings: "Settings",  # noqa: F821 — imported at call site
+    bars: list[Bar],
+    symbol: str,
+    run_id: str,
+) -> "BacktestResult":
+    """Build engine components and run a single-symbol backtest.
+
+    Does not write to the journal or print anything — callers handle that.
+    Uses ``symbol`` for the SymbolAllowList rule so multi-symbol callers can
+    override the config's allow-list without creating per-symbol config files.
+    """
+    from cryptobot.config import Settings  # local import avoids circular at module level
+
+    rc = settings.run.risk
+    fc = settings.run.fees
+    sc = settings.run.strategy
+
+    fees = FeeModel(
+        taker_bps=fc.taker_bps,
+        maker_bps=fc.maker_bps,
+        slippage_bps=fc.slippage_bps,
+    )
+
+    starting_cash = settings.run.starting_cash
+    broker = BacktestBroker(starting_cash=starting_cash, fees=fees)
+
+    rules = [
+        SymbolAllowList([symbol]),
+        MaxOrdersPerMinute(rc.max_orders_per_minute),
+        OneOrderPerSymbolInFlight(),
+    ]
+    if rc.require_stop_loss:
+        rules.append(RequireStopLoss())
+    rules += [
+        MaxDailyLoss(max_loss_pct=rc.max_daily_loss_pct),
+        MaxPositionSizePct(rc.max_position_pct),
+        MaxGrossExposurePct(rc.max_gross_exposure_pct),
+        KillSwitchFile(settings.env.kill_switch_file),
+    ]
+    risk = RiskManager(rules)
+
+    strategy_cls = get_strategy(sc.name)
+    strategy = strategy_cls(params=sc.params)
+
+    engine = BacktestEngine(strategy=strategy, broker=broker, risk=risk, bars=bars)
+    return engine.run(run_id)
 
 
 # ---------------------------------------------------------------------------
@@ -334,43 +387,8 @@ def main(config_path: str | Path, data_path: str | Path | None = None, out_dir: 
     if len(bars) < 2:
         raise ValueError(f"Need at least 2 bars, got {len(bars)} from {data_path}")
 
-    # --- Build components ---
-    rc = settings.run.risk
-    fc = settings.run.fees
-    sc = settings.run.strategy
-
-    fees = FeeModel(
-        taker_bps=fc.taker_bps,
-        maker_bps=fc.maker_bps,
-        slippage_bps=fc.slippage_bps,
-    )
-
-    starting_cash = 10_000.0  # default; will expose as config field in Phase 4+
-
-    broker = BacktestBroker(starting_cash=starting_cash, fees=fees)
-
-    rules = [
-        SymbolAllowList(rc.symbol_allow_list),
-        MaxOrdersPerMinute(rc.max_orders_per_minute),
-        OneOrderPerSymbolInFlight(),
-    ]
-    if rc.require_stop_loss:
-        rules.append(RequireStopLoss())
-    rules += [
-        MaxDailyLoss(max_loss_pct=rc.max_daily_loss_pct),
-        MaxPositionSizePct(rc.max_position_pct),
-        MaxGrossExposurePct(rc.max_gross_exposure_pct),
-        KillSwitchFile(settings.env.kill_switch_file),
-    ]
-    risk = RiskManager(rules)
-
-    strategy_cls = get_strategy(sc.name)
-    strategy = strategy_cls(params=sc.params)
-
-    engine = BacktestEngine(strategy=strategy, broker=broker, risk=risk, bars=bars)
-
     log.info("backtest_running", n_bars=len(bars))
-    result = engine.run(run_id)
+    result = _run_symbol(settings, bars, symbol, run_id)
 
     # --- Journal writes ---
     init_db(settings.env.db_url)
@@ -419,12 +437,12 @@ def _print_report(
 
     total_fees = sum(float(f.fee) for f in result.fills)
 
-    sep = "━" * 51
-    thin = "─" * 51
+    sep = "=" * 51
+    thin = "-" * 51
 
     print(f"\n{sep}")
     print(f"  BACKTEST  {result.run_id}")
-    print(f"  {symbol}  {timeframe}  |  {start_ts} → {end_ts}")
+    print(f"  {symbol}  {timeframe}  |  {start_ts} -> {end_ts}")
     print(sep)
     print(f"  Starting capital : ${starting:>12,.2f}")
     print(f"  Final equity     : ${result.final_equity:>12,.2f}")

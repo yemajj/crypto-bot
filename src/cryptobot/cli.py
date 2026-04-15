@@ -56,6 +56,29 @@ def backtest(
     typer.echo(f"backtest complete: run_id={run_id}")
 
 
+@app.command("multi-backtest")
+def multi_backtest(
+    config: Path = typer.Option(..., exists=True, help="Path to backtest YAML with multiple symbols."),
+    data_dir: Path = typer.Option(
+        Path("data"),
+        "--data-dir",
+        help="Directory containing per-symbol CSV files named {SYMBOL}_{TIMEFRAME}.csv.",
+    ),
+    out_dir: Path | None = typer.Option(
+        None,
+        "--out-dir",
+        help="Directory to write portfolio_summary.md, portfolio_metrics.json, and per-symbol bundles.",
+    ),
+) -> None:
+    """Run a backtest over a basket of symbols and report portfolio-level metrics.
+
+    Expects one CSV per symbol in DATA_DIR named {SYMBOL_NORMALISED}_{TIMEFRAME}.csv,
+    e.g. data/BTC_USDT_4h.csv. Symbols are taken from config market.symbols.
+    """
+    from cryptobot.app import run_multi_backtest
+    run_multi_backtest.main(config, data_dir=data_dir, out_dir=out_dir)
+
+
 @app.command("walk-forward")
 def walk_forward(
     config: Path = typer.Option(..., exists=True, help="Path to backtest YAML."),
@@ -237,7 +260,7 @@ def export_csv(
                 str(bar.volume),
             ])
 
-    typer.echo(f"Exported {len(bars):,} bars → {out}")
+    typer.echo(f"Exported {len(bars):,} bars -> {out}")
 
 
 @app.command()
