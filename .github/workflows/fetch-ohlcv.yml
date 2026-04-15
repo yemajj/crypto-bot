@@ -105,10 +105,13 @@ jobs:
           echo "..."
           echo "Total rows: $(( $(wc -l < "${CSV_FILE}") - 1 )) bars"
 
+      - name: Set safe symbol
+        run: echo "SYMBOL_SAFE=$(echo '${{ github.event.inputs.symbol }}' | tr '/' '_')" >> $GITHUB_ENV
+
       - name: Upload OHLCV artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ohlcv-${{ github.event.inputs.symbol == 'BTC/USDT' && 'BTCUSDT' || github.event.inputs.symbol }}-${{ github.event.inputs.timeframe }}-${{ github.run_id }}
-          path: data/*.csv
+          name: ohlcv-${{ env.SYMBOL_SAFE }}-${{ github.event.inputs.timeframe }}-${{ github.run_id }}
+          path: data/${{ env.SYMBOL_SAFE }}_${{ github.event.inputs.timeframe }}.csv
           retention-days: 90
           if-no-files-found: error
