@@ -2,7 +2,7 @@
 
 > **Weak edge — 0.4% return but Sharpe 0.07 is noise-level. Not tradeable without further work.**
 
-**SOL/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T170802Z-bd4e94a1`
+**SOL/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T171122Z-d4cdfbc0`
 
 ---
 
