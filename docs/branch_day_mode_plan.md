@@ -118,6 +118,35 @@ Merge into main only if:
 
 Otherwise, keep as a research branch or discard.
 
+## Research Log
+
+### XSMOM — Cross-Sectional Rate-of-Change Momentum (COMPLETED, WEAK)
+
+Implementation: `src/cryptobot/strategy/xsmom.py`, `src/cryptobot/app/run_xsmom_backtest.py`
+
+Architecture: one shared strategy instance maintains `_roc_cache` (symbol → N-bar RoC) across all symbols. Symbols ranked by RoC percentile each bar. Buy top tier (rank ≥ 0.66) with positive absolute momentum. Exit on `roc < 0` (primary) or bottom-third rank (secondary). ATR-based stop sizing.
+
+| Run | Timeframe | Lookback | Trades/day | Win rate | Sharpe | Avg return | Fees |
+|-----|-----------|----------|------------|----------|--------|------------|------|
+| 15m | 15m | 20 bars (5h) | 13.3 | 16.5% | -15.07 | -68.1% | $15,325 |
+| 1h  | 1h  | 20 bars (20h) | 2.5  | 29.3% | -2.30  | -12.84% | $3,114 |
+
+**Verdict: WEAK on both timeframes.**
+
+The 15m result failed primarily due to fee drag (5h window → 13 trades/day → $15k fees on $30k capital). The 1h result isolates the signal: even with modest fee drag ($3.1k on $30k), gross P&L before fees is near-zero or negative. Win rate of 29% is well below breakeven. The ranking signal itself has no positive expectancy on this basket/period.
+
+**Conclusion: abandon XSMOM. Do not tune parameters. Signal family does not work.**
+
+### Next Candidates
+
+If continuing day-mode research, structurally different directions to consider:
+
+- **Volatility-regime filter + mean reversion**: trade only during low-ATR periods when range-bound behavior is expected; buy oversold (low RSI or lower Bollinger band) within the regime filter. Different from previous RSI attempts in that the regime gate is the key filter.
+- **Volume-surge breakout**: enter when volume spikes N× the rolling average AND price breaks recent range; volume is the confirmation rather than a price indicator. Structurally different from Donchian (no volume gate before).
+- **Time-of-day filtered ORB variant**: narrow the ORB entry window, add a volume confirmation gate, and filter to specific session hours known to have directional bias. Different from the previous ORB failure (broader window, no volume filter).
+
+---
+
 ## How to Use This File
 
 At the start of each Claude session:
