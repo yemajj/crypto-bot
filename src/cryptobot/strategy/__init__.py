@@ -13,5 +13,6 @@ from cryptobot.strategy import orb  # noqa: F401
 from cryptobot.strategy import bollinger  # noqa: F401
 from cryptobot.strategy import volume_signal  # noqa: F401
 from cryptobot.strategy import ensemble  # noqa: F401
+from cryptobot.strategy import xsmom  # noqa: F401
 
 __all__ = ["Strategy", "StrategyContext", "register_strategy", "get_strategy"]
