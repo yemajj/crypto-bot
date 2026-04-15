@@ -1,75 +1,75 @@
 {
   "strategy": "xsmom",
-  "timeframe": "1h",
+  "timeframe": "15m",
   "date_from": "2023-01-01",
-  "date_to": "2025-04-14",
+  "date_to": "2026-04-15",
   "basket": [
     "BTC/USDT",
     "SOL/USDT",
     "LINK/USDT"
   ],
   "starting_cash_per_symbol": 10000.0,
-  "portfolio_avg_return_pct": -12.839,
-  "portfolio_sharpe": -2.304,
-  "portfolio_max_drawdown_pct": 13.0,
-  "portfolio_win_rate_pct": 29.31,
-  "total_trades": 2081,
-  "trades_per_day": 2.495,
-  "total_fees": 3114.49,
+  "portfolio_avg_return_pct": -68.104,
+  "portfolio_sharpe": -15.069,
+  "portfolio_max_drawdown_pct": 68.2,
+  "portfolio_win_rate_pct": 16.47,
+  "total_trades": 15930,
+  "trades_per_day": 13.275,
+  "total_fees": 15324.78,
   "dominant_symbol": null,
   "dominant_pct": 0.0,
-  "avg_pairwise_correlation": 0.003,
+  "avg_pairwise_correlation": 0.095,
   "correlation_matrix": {
     "BTC/USDT": {
       "BTC/USDT": 1.0,
-      "SOL/USDT": 0.005,
-      "LINK/USDT": -0.001
+      "SOL/USDT": 0.107,
+      "LINK/USDT": 0.075
     },
     "SOL/USDT": {
-      "BTC/USDT": 0.005,
+      "BTC/USDT": 0.107,
       "SOL/USDT": 1.0,
-      "LINK/USDT": 0.004
+      "LINK/USDT": 0.104
     },
     "LINK/USDT": {
-      "BTC/USDT": -0.001,
-      "SOL/USDT": 0.004,
+      "BTC/USDT": 0.075,
+      "SOL/USDT": 0.104,
       "LINK/USDT": 1.0
     }
   },
-  "verdict": "weak \u2014 portfolio Sharpe -2.30, -12.8% avg return, 29% win rate. Strategy family not good enough at portfolio level.",
+  "verdict": "weak \u2014 portfolio Sharpe -15.07, -68.1% avg return, 16% win rate. Strategy family not good enough at portfolio level.",
   "per_symbol": [
     {
       "symbol": "BTC/USDT",
-      "run_id": "bt-20260415T140905Z-e2a57e0f",
-      "total_return_pct": -15.059,
-      "sharpe": -2.192,
-      "max_drawdown_pct": 15.901,
-      "win_rate_pct": 31.12,
-      "n_trades": 694,
-      "pnl": -1505.85,
-      "total_fees": 1012.8
+      "run_id": "bt-20260415T161622Z-b8e99029",
+      "total_return_pct": -74.493,
+      "sharpe": -21.835,
+      "max_drawdown_pct": 74.495,
+      "win_rate_pct": 12.3,
+      "n_trades": 5936,
+      "pnl": -7449.33,
+      "total_fees": 5204.57
     },
     {
       "symbol": "SOL/USDT",
-      "run_id": "bt-20260415T140905Z-6d3391e8",
-      "total_return_pct": -13.807,
-      "sharpe": -1.134,
-      "max_drawdown_pct": 14.577,
-      "win_rate_pct": 28.85,
-      "n_trades": 707,
-      "pnl": -1380.68,
-      "total_fees": 1061.96
+      "run_id": "bt-20260415T161624Z-c0edb5f8",
+      "total_return_pct": -62.683,
+      "sharpe": -6.971,
+      "max_drawdown_pct": 63.81,
+      "win_rate_pct": 19.86,
+      "n_trades": 5015,
+      "pnl": -6268.28,
+      "total_fees": 5231.57
     },
     {
       "symbol": "LINK/USDT",
-      "run_id": "bt-20260415T140905Z-27106d31",
-      "total_return_pct": -9.653,
-      "sharpe": -1.031,
-      "max_drawdown_pct": 11.013,
-      "win_rate_pct": 27.94,
-      "n_trades": 680,
-      "pnl": -965.26,
-      "total_fees": 1039.73
+      "run_id": "bt-20260415T161626Z-720170f5",
+      "total_return_pct": -67.137,
+      "sharpe": -8.371,
+      "max_drawdown_pct": 67.154,
+      "win_rate_pct": 18.02,
+      "n_trades": 4979,
+      "pnl": -6713.67,
+      "total_fees": 4888.64
     }
   ]
 }

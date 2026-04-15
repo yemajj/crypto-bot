@@ -1,8 +1,8 @@
 # Backtest: xsmom
 
-> **Poor — lost 15.1% with Sharpe -2.19. No edge in this configuration.**
+> **Poor — lost 74.5% with Sharpe -21.84. No edge in this configuration.**
 
-**BTC/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T140905Z-e2a57e0f`
+**BTC/USDT 15m** | 2023-01-01 -> 2026-04-15 | 114,755 bars | `bt-20260415T161622Z-b8e99029`
 
 ---
 
@@ -10,25 +10,25 @@
 
 | Metric | Value |
 |---|---|
-| Total Return | -15.06% |
-| Max Drawdown | -15.90% |
-| Sharpe Ratio | -2.19 |
-| Sortino Ratio | -3.03 |
-| Calmar Ratio | -0.43 |
-| Final Equity | $8,494.15 |
+| Total Return | -74.49% |
+| Max Drawdown | -74.50% |
+| Sharpe Ratio | -21.84 |
+| Sortino Ratio | -27.77 |
+| Calmar Ratio | -0.46 |
+| Final Equity | $2,550.67 |
 | Starting Cash | $10,000.00 |
 
 ## Trades
 
 | Metric | Value |
 |---|---|
-| Total Trades | 694 |
-| Trades / Day | 0.832 |
-| Win Rate | 31.1% |
-| Profit Factor | 0.67 |
-| Expectancy | $-2.17 / trade |
-| Avg Trade Return | -0.292% |
-| Time in Market | 30.2% |
-| Max Consec. Losses | 21 |
-| Max Consec. Wins | 6 |
-| Total Fees Paid | $1,012.80 |
+| Total Trades | 5936 |
+| Trades / Day | 4.947 |
+| Win Rate | 12.3% |
+| Profit Factor | 0.21 |
+| Expectancy | $-1.25 / trade |
+| Avg Trade Return | -0.287% |
+| Time in Market | 19.4% |
+| Max Consec. Losses | 57 |
+| Max Consec. Wins | 4 |
+| Total Fees Paid | $5,204.57 |

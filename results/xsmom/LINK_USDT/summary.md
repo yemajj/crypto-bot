@@ -1,8 +1,8 @@
 # Backtest: xsmom
 
-> **Poor — lost 9.7% with Sharpe -1.03. No edge in this configuration.**
+> **Poor — lost 67.1% with Sharpe -8.37. No edge in this configuration.**
 
-**LINK/USDT 1h** | 2023-01-01 -> 2025-04-14 | 20,040 bars | `bt-20260415T140905Z-27106d31`
+**LINK/USDT 15m** | 2023-01-01 -> 2026-04-15 | 114,757 bars | `bt-20260415T161626Z-720170f5`
 
 ---
 
@@ -10,25 +10,25 @@
 
 | Metric | Value |
 |---|---|
-| Total Return | -9.65% |
-| Max Drawdown | -11.01% |
-| Sharpe Ratio | -1.03 |
-| Sortino Ratio | -1.46 |
-| Calmar Ratio | -0.39 |
-| Final Equity | $9,034.74 |
+| Total Return | -67.14% |
+| Max Drawdown | -67.15% |
+| Sharpe Ratio | -8.37 |
+| Sortino Ratio | -11.45 |
+| Calmar Ratio | -0.43 |
+| Final Equity | $3,286.33 |
 | Starting Cash | $10,000.00 |
 
 ## Trades
 
 | Metric | Value |
 |---|---|
-| Total Trades | 680 |
-| Trades / Day | 0.815 |
-| Win Rate | 27.9% |
-| Profit Factor | 0.83 |
-| Expectancy | $-1.42 / trade |
-| Avg Trade Return | -0.182% |
-| Time in Market | 30.7% |
-| Max Consec. Losses | 13 |
-| Max Consec. Wins | 5 |
-| Total Fees Paid | $1,039.73 |
+| Total Trades | 4979 |
+| Trades / Day | 4.149 |
+| Win Rate | 18.0% |
+| Profit Factor | 0.46 |
+| Expectancy | $-1.35 / trade |
+| Avg Trade Return | -0.279% |
+| Time in Market | 27.3% |
+| Max Consec. Losses | 38 |
+| Max Consec. Wins | 6 |
+| Total Fees Paid | $4,888.64 |

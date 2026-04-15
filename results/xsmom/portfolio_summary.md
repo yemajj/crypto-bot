@@ -1,8 +1,8 @@
 # Multi-Symbol Backtest: xsmom
 
-> **VERDICT: weak — portfolio Sharpe -2.30, -12.8% avg return, 29% win rate. Strategy family not good enough at portfolio level.**
+> **VERDICT: weak — portfolio Sharpe -15.07, -68.1% avg return, 16% win rate. Strategy family not good enough at portfolio level.**
 
-**Basket:** BTC/USDT, SOL/USDT, LINK/USDT | **Timeframe:** 1h | 2023-01-01 -> 2025-04-14
+**Basket:** BTC/USDT, SOL/USDT, LINK/USDT | **Timeframe:** 15m | 2023-01-01 -> 2026-04-15
 
 ---
 
@@ -10,13 +10,13 @@
 
 | Metric | Value |
 |---|---|
-| Avg Return (equal weight) | -12.84% |
-| Portfolio Sharpe | -2.30 |
-| Portfolio Max Drawdown | -13.00% |
-| Win Rate (all symbols) | 29.3% |
-| Total Trades | 2081 |
-| Avg Trades / Day (portfolio) | 2.495 |
-| Total Fees Paid | $3,114.49 |
+| Avg Return (equal weight) | -68.10% |
+| Portfolio Sharpe | -15.07 |
+| Portfolio Max Drawdown | -68.20% |
+| Win Rate (all symbols) | 16.5% |
+| Total Trades | 15930 |
+| Avg Trades / Day (portfolio) | 13.275 |
+| Total Fees Paid | $15,324.78 |
 
 ---
 
@@ -24,9 +24,9 @@
 
 | Symbol | Return | Sharpe | Max DD | Win Rate | Trades | PnL | Share of Gains |
 |---|---|---|---|---|---|---|---|
-| BTC/USDT | -15.1% | -2.19 | -15.9% | 31% | 694 | $-1,506 |  |
-| SOL/USDT | -13.8% | -1.13 | -14.6% | 29% | 707 | $-1,381 |  |
-| LINK/USDT | -9.7% | -1.03 | -11.0% | 28% | 680 | $-965 |  |
+| BTC/USDT | -74.5% | -21.84 | -74.5% | 12% | 5936 | $-7,449 |  |
+| SOL/USDT | -62.7% | -6.97 | -63.8% | 20% | 5015 | $-6,268 |  |
+| LINK/USDT | -67.1% | -8.37 | -67.2% | 18% | 4979 | $-6,714 |  |
 
 ---
 
@@ -34,11 +34,11 @@
 
 | | BTC/USDT | SOL/USDT | LINK/USDT |
 |---|---|---|---|
-| BTC/USDT | 1.00 | 0.01 | -0.00 |
-| SOL/USDT | 0.01 | 1.00 | 0.00 |
-| LINK/USDT | -0.00 | 0.00 | 1.00 |
+| BTC/USDT | 1.00 | 0.11 | 0.07 |
+| SOL/USDT | 0.11 | 1.00 | 0.10 |
+| LINK/USDT | 0.07 | 0.10 | 1.00 |
 
-Average pairwise correlation: **0.00** — low correlation, meaningful diversification.
+Average pairwise correlation: **0.10** — low correlation, meaningful diversification.
 
 ---
 
