@@ -1,7 +1,7 @@
 # cryptobot — Development Plan
 
-> Last updated: 2026-04-09 (session 3)
-> Current phase: **Phases 1–5 and Phase 7 complete. Phase 6 (live trading) gated on weeks of paper trading validation.**
+> Last updated: 2026-04-14 (session 4)
+> Current phase: **Phases 1–5 and Phase 7 complete. Active research: multi-symbol swing basket validation. Phase 6 (live trading) gated.**
 
 ---
 
@@ -249,6 +249,41 @@ Phase-6 live prerequisites (async fills, exchange precision, reconciliation) are
 ---
 
 # Current Direction Update
+
+## Pick up here (session 5)
+
+**Status:** Multi-symbol 4h SMA swing basket is the active research path.
+
+**Blocker:** Walk-forward OOS is inconclusive — only 1-4 trades per fold across a 3-symbol basket.
+Need > 20 OOS trades per fold for the statistics to be meaningful.
+
+**First task next session:**
+1. Fetch 4h history for 2-3 more symbols (BNB/USDT, AVAX/USDT, or LINK/USDT):
+   ```bash
+   cryptobot fetch-history --symbol BNB/USDT --timeframe 4h --since 2023-01-01
+   cryptobot export-csv --symbol BNB/USDT --timeframe 4h --out data/BNB_USDT_4h.csv
+   cryptobot fetch-history --symbol AVAX/USDT --timeframe 4h --since 2023-01-01
+   cryptobot export-csv --symbol AVAX/USDT --timeframe 4h --out data/AVAX_USDT_4h.csv
+   ```
+2. Add symbols to `config/backtest_swing_basket.yaml` (market.symbols + risk.symbol_allow_list)
+3. Re-run basket:
+   ```bash
+   cryptobot multi-backtest --config config/backtest_swing_basket.yaml --data-dir data/ --out-dir results/swing_basket
+   ```
+4. If total trades/day portfolio ≥ 0.10, re-run walk-forward on each symbol:
+   ```bash
+   cryptobot walk-forward --config config/backtest_swing_basket.yaml --data data/BTC_USDT_4h.csv --folds 5
+   ```
+5. Interpret OOS results:
+   - OOS Sharpe > 0.5 consistently → paper trade the basket
+   - OOS Sharpe < 0 at adequate trade count → abandon SMA family; try a different strategy class
+
+**Do not:**
+- Tune SMA parameters to rescue weak OOS folds
+- Add ETH back if it continues to drag (currently Sharpe -0.68 vs BTC +1.07, SOL +0.89)
+- Move to live trading before paper validation
+
+---
 
 ## Summary of recent findings
 
