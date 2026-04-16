@@ -1,0 +1,63 @@
+# Volume-Surge Breakout (VSBR) backtest config
+#
+# Strategy: enter on a simultaneous volume spike AND price breakout to a new
+# N-bar high. The volume gate is the key structural addition over Donchian:
+# low-conviction breakouts (no elevated volume) are filtered out.
+#
+# Exit: close drops below a short trailing EMA (trend-fading signal).
+# ATR-based stop is the hard floor passed to the risk layer.
+#
+# Timeframe: 15m — all three symbols have 15m data; VSBR is far more
+# selective than XSMOM (requires both conditions simultaneously), so
+# expected trade frequency is much lower than XSMOM's 13/day.
+#
+# Runner:
+#   CRYPTOBOT_LOG_LEVEL=WARNING cryptobot multi-backtest \
+#     --config config/backtest_vsbr.yaml \
+#     --data-dir data/ \
+#     --out-dir results/vsbr/
+#
+# Data files expected:
+#   data/BTC_USDT_15m.csv  data/SOL_USDT_15m.csv  data/LINK_USDT_15m.csv
+
+mode: backtest
+
+market:
+  symbols:
+    - BTC/USDT
+    - SOL/USDT
+    - LINK/USDT
+  timeframe: 15m
+
+strategy:
+  name: vsbr
+  params:
+    vol_window: 20                   # rolling avg volume window (preceding bars)
+    vol_surge_mult: 2.0              # volume must be >= 2× rolling average
+    breakout_window: 20              # close must be >= 20-bar rolling high
+    trail_ema_window: 10             # exit when close < 10-bar EMA
+    atr_window: 14
+    stop_distance_multiplier: 1.5
+    risk_per_trade_pct: 0.005
+    max_position_notional_pct: 0.08
+
+risk:
+  max_position_pct: 0.10
+  max_gross_exposure_pct: 0.30
+  max_daily_loss_pct: 0.03
+  max_orders_per_minute: 10
+  require_stop_loss: true
+  symbol_allow_list:
+    - BTC/USDT
+    - SOL/USDT
+    - LINK/USDT
+  max_open_positions: 2
+  cooldown_after_losses: 0          # off for first-pass clean test
+
+fees:
+  taker_bps: 10.0
+  maker_bps: 5.0
+  slippage_bps: 5.0
+
+starting_cash: 10000.0
+warmup_bars: 25                     # covers max(vol_window, breakout_window) + a few bars

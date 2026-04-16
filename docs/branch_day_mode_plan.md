@@ -161,12 +161,38 @@ However, this is the most informative negative result so far:
 
 **Conclusion: VRFMR has a partial signal (SOL) but does not generalize across the basket. Do not tune parameters. The structural question is whether BTC/LINK are simply less range-bound in this dataset or whether the regime detection is miscalibrated for those volatility profiles.**
 
+### VSBR — Volume-Surge Breakout (COMPLETED, WEAK)
+
+Implementation: `src/cryptobot/strategy/vsbr.py`, config `config/backtest_vsbr.yaml`
+
+Architecture: per-symbol, no shared state. Entry requires two simultaneous conditions: (1) current volume >= 2× 20-bar rolling average volume, (2) current close >= 20-bar rolling high. Exit on close < 10-bar trailing EMA. ATR-based stop sizing.
+
+| Symbol | Return | Sharpe | Win Rate | Trades | Fees |
+|--------|--------|--------|----------|--------|------|
+| BTC/USDT | -30.3% | -6.29 | 18% | 2,052 | $2,786 |
+| SOL/USDT | -30.0% | -3.36 | 22% | 2,116 | $2,983 |
+| LINK/USDT | -34.5% | -4.28 | 22% | 2,166 | $2,881 |
+| **Portfolio** | **-31.6%** | **-6.12** | **21%** | **6,334** | **$8,650** |
+
+Timeframe: 15m | Trades/day: 5.3 | Period: 2023-01-01 → 2026-04-15
+
+**Verdict: WEAK.**
+
+The volume surge condition is not selective enough at 15m. The strategy generated 5.3 trades/day (similar to XSMOM 1h), with a 21% win rate — catastrophically below breakeven. The core problem: on 15m bars, volume spikes near local highs are common noise events, not genuine institutional breakouts. The two conditions fire together frequently rather than rarely.
+
+Gross P&L is deeply negative independent of fees. The signal has no edge.
+
+**Conclusion: abandon VSBR at 15m. The volume-surge + price-breakout combination does not filter false breakouts at short timeframes. Do not tune parameters.**
+
+**Engineering note:** session also fixed two latent performance bugs:
+- `risk_allowed` was logged at `INFO` level (now `DEBUG`) — was flooding log on high-frequency strategies
+- `run_multi_backtest.py` was writing 100k+ equity snapshots per symbol to SQLite (now skipped — results go to files only)
+
 ### Next Candidates
 
-If continuing day-mode research, structurally different directions to consider:
+One candidate remains for day-mode research:
 
-- **Volume-surge breakout**: enter when volume spikes N× the rolling average AND price breaks recent range; volume is the confirmation rather than a price indicator. Structurally different from Donchian (no volume gate before).
-- **Time-of-day filtered ORB variant**: narrow the ORB entry window, add a volume confirmation gate, and filter to specific session hours known to have directional bias. Different from the previous ORB failure (broader window, no volume filter).
+- **Time-of-day filtered ORB variant**: narrow the ORB entry window, add a volume confirmation gate, and filter to specific session hours known to have directional bias. Structurally different from the prior ORB failure (broader window, no volume filter).
 
 ---
 
