@@ -36,5 +36,5 @@ class RiskManager:
                     reason=verdict.reason,
                 )
                 return Decision(intent=intent, verdict=verdict)
-        log.info("risk_allowed", symbol=intent.symbol, strategy=intent.strategy_id)
+        log.debug("risk_allowed", symbol=intent.symbol, strategy=intent.strategy_id)
         return Decision(intent=intent, verdict=Verdict.allow())

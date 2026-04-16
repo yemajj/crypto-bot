@@ -30,16 +30,6 @@ from cryptobot.backtest.engine import BacktestResult
 from cryptobot.backtest.metrics import Metrics, _max_drawdown, _sharpe, compute_metrics
 from cryptobot.config import load_settings
 from cryptobot.core.ids import new_run_id
-from cryptobot.journal.writer import (
-    build_engine as build_db_engine,
-    init_db,
-    make_session_factory,
-    record_equity_snapshots_bulk,
-    record_fill,
-    record_order,
-    record_run_end,
-    record_run_start,
-)
 from cryptobot.monitoring.logging_setup import setup_logging
 
 
@@ -395,9 +385,12 @@ def main(
     data_root = Path(data_dir) if data_dir else Path("data")
     out_root = Path(out_dir) if out_dir else None
 
+    # Multi-backtests log at WARNING by default to avoid per-order log spam
+    # across 100k+ bars. Results are written to out_dir files instead.
+    effective_level = settings.env.log_level if settings.env.log_level != "INFO" else "WARNING"
     log = setup_logging(
         log_dir=settings.env.log_dir,
-        level=settings.env.log_level,
+        level=effective_level,
         run_id="multi-bt",
     )
     log.info(
@@ -431,18 +424,10 @@ def main(
 
         result = _run_symbol(settings, bars, symbol, run_id)
 
-        # Journal writes
-        init_db(settings.env.db_url)
-        db_engine = build_db_engine(settings.env.db_url)
-        sf = make_session_factory(db_engine)
-        record_run_start(sf, run_id, mode="backtest", strategy_name=sc.name,
-                         notes=f"multi_backtest symbol={symbol}")
-        for order in result.orders:
-            record_order(sf, run_id, order)
-        for fill in result.fills:
-            record_fill(sf, fill)
-        record_equity_snapshots_bulk(sf, run_id, [b.ts_open for b in bars], result.equity_curve)
-        record_run_end(sf, run_id, notes=f"final_equity={result.final_equity:.2f}")
+        # Journal writes are intentionally skipped for multi-backtest runs.
+        # Writing 100k+ equity snapshots per symbol to SQLite makes 15m
+        # backtests impractically slow; results are already persisted to
+        # per-symbol CSV / JSON files in out_dir.
 
         symbol_results.append(SymbolResult(symbol=symbol, run_id=run_id, result=result, bars=bars))
 
