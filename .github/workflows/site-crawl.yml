@@ -1,0 +1,138 @@
+# .github/workflows/site-crawl.yml
+#
+# Phase 1 of the site-analysis/redesign task: crawl an external site and
+# commit the captured HTML + assets back onto the branch it was dispatched
+# from. Designed for mobile triggering — tap "Run workflow" in the GitHub
+# app, pick the branch (claude/analyze-redesign-website-9udYM), and the
+# captured pages show up on that branch a few minutes later. Then a fresh
+# Claude Code session reads the committed HTML for Phases 2–4.
+#
+# Fetcher modes
+# - auto (default): try requests; if the homepage is WAF-blocked, switch
+#   to Playwright automatically.
+# - requests: fast, no browser. Fails on WAFs and SPAs.
+# - playwright: real headless Chromium. Slower but bypasses most bot walls.
+
+name: Site Crawl (analysis phase 1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target URL (entry point)'
+        required: true
+        default: 'https://www.ruttyandmorris.com/'
+      fetcher:
+        description: 'Fetcher mode'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - requests
+          - playwright
+      max_depth:
+        description: 'Max crawl depth (same-origin links only)'
+        required: true
+        default: '3'
+      delay:
+        description: 'Per-request delay in seconds'
+        required: true
+        default: '1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout (dispatched ref)
+        uses: actions/checkout@v4
+        with:
+          # Use a PAT-free token that can push back to the branch.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Full history so we can push cleanly.
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests beautifulsoup4 lxml playwright
+
+      - name: Install Chromium for Playwright
+        # Always install — `auto` mode may need it mid-run and it's only
+        # ~30s with the deps cached on the runner image.
+        run: python -m playwright install --with-deps chromium
+
+      - name: Clean previous crawl output
+        run: |
+          rm -rf site-analysis/original site-analysis/sitemap.txt site-analysis/fetch.log
+          mkdir -p site-analysis/original
+
+      - name: Run crawler
+        id: crawl
+        run: |
+          set -o pipefail
+          python site-analysis/crawl.py \
+            --target "${{ github.event.inputs.target }}" \
+            --fetcher "${{ github.event.inputs.fetcher }}" \
+            --max-depth "${{ github.event.inputs.max_depth }}" \
+            --delay "${{ github.event.inputs.delay }}" \
+            2>&1 | tee site-analysis/crawl-console.log
+
+      - name: Summarise capture
+        if: always()
+        run: |
+          echo "=== site-analysis tree ==="
+          ls -la site-analysis/ || true
+          echo
+          echo "=== pages captured ==="
+          ls -la site-analysis/original/pages/ 2>/dev/null | head -50 || echo "(none)"
+          echo
+          echo "=== assets captured ==="
+          ls site-analysis/original/assets/ 2>/dev/null | wc -l || echo 0
+          echo
+          echo "=== sitemap ==="
+          cat site-analysis/sitemap.txt 2>/dev/null || echo "(no sitemap)"
+
+      - name: Upload artifact (download from Actions UI)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-crawl-${{ github.run_id }}
+          path: |
+            site-analysis/original/
+            site-analysis/sitemap.txt
+            site-analysis/fetch.log
+            site-analysis/crawl-console.log
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Commit captured pages back to the branch
+        if: success()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Stage only the crawl outputs — never the ad-hoc console log.
+          git add site-analysis/original site-analysis/sitemap.txt site-analysis/fetch.log || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit — crawl produced no new files."
+            exit 0
+          fi
+
+          TARGET_HOST=$(python -c "from urllib.parse import urlparse; import sys; print(urlparse(sys.argv[1]).netloc)" "${{ github.event.inputs.target }}")
+          git commit -m "Capture site crawl of ${TARGET_HOST} (fetcher=${{ github.event.inputs.fetcher }}, depth=${{ github.event.inputs.max_depth }}, run=${{ github.run_id }})"
+
+          # Push back to whatever ref the workflow was dispatched against.
+          git push origin HEAD:"${GITHUB_REF#refs/heads/}"

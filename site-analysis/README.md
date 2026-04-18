@@ -17,29 +17,48 @@ What *is* committed:
 
 - `crawl.py` — the Phase 1 crawler, ready to run. requests + BeautifulSoup,
   depth 3, same-origin only, 1s delay, `robots.txt`-aware, logs failures and
-  continues, detects SPA shells and warns.
+  continues, auto-falls back to Playwright on WAF 403 / Cloudflare
+  challenge / SPA shells.
+- `.github/workflows/site-crawl.yml` — `workflow_dispatch` trigger that
+  runs `crawl.py` on a GitHub-hosted runner and commits the output back
+  to this branch. Triggerable from the GitHub mobile app.
 - This README.
 
-## How to unblock
+## How to unblock (pick one)
 
-Pick one:
+### 1. Run it from your phone via GitHub Actions (preferred)
 
-1. **Run the crawler locally** and commit the output:
-   ```bash
-   python -m pip install requests beautifulsoup4
-   python site-analysis/crawl.py
-   git add site-analysis/original site-analysis/sitemap.txt site-analysis/fetch.log
-   git commit -m "Add crawled site-analysis original/ snapshot"
-   git push
-   ```
-   Then ping Claude and it will pick up Phase 2 from the committed HTML.
+There's a dispatchable workflow at `.github/workflows/site-crawl.yml`.
+From the GitHub mobile app: **Actions → "Site Crawl (analysis phase 1)"
+→ Run workflow**, pick branch `claude/analyze-redesign-website-9udYM`,
+leave the defaults, tap Run. The job:
 
-2. **Paste a handful of pages' HTML** into `site-analysis/original/pages/`
-   manually (homepage + top conversion pages is enough to start).
+1. Installs `requests` + `beautifulsoup4` + Playwright Chromium.
+2. Runs `crawl.py` in `--fetcher=auto` (falls back to Playwright on
+   Cloudflare / WAF / SPA shells automatically).
+3. Commits `site-analysis/original/`, `sitemap.txt`, and `fetch.log`
+   back to the dispatched branch.
+4. Also uploads everything as a downloadable artifact, in case the
+   commit step is ever skipped.
 
-3. **Allow outbound access** to `www.ruttyandmorris.com` in the sandbox and
-   re-run the task — Claude will crawl, analyse, redesign, and report in one
-   pass.
+Once it lands, start a fresh Claude Code session on that branch and
+ask for Phase 2.
+
+### 2. Run the crawler locally
+
+```bash
+python -m pip install requests beautifulsoup4 playwright
+python -m playwright install --with-deps chromium   # optional; only needed for WAFs / SPAs
+python site-analysis/crawl.py                       # --fetcher=auto is default
+git add site-analysis/original site-analysis/sitemap.txt site-analysis/fetch.log
+git commit -m "Add crawled site-analysis original/ snapshot"
+git push
+```
+
+### 3. Paste HTML manually
+
+Drop a few pages into `site-analysis/original/pages/` by hand
+(homepage + top conversion pages is enough to start Phase 2).
 
 ## Layout after Phase 1 runs
 
@@ -65,9 +84,9 @@ site-analysis/
 
 ## Caveats flagged early
 
-- If `crawl.py` gets 403s from Cloudflare/WAF on your machine as well, the
-  site is bot-gated. Switch to Playwright (`playwright install chromium`,
-  use `page.goto(url); page.content()`) — I can rewrite `crawl.py` against
-  Playwright once we confirm that's needed.
-- If the crawler warns `SPA shell detected`, same fix: Playwright renders
-  JS, `requests` doesn't.
+- GitHub Actions runner IPs are well-known; some Cloudflare configs block
+  them outright even through Playwright. If the workflow run shows
+  `fetch_failed` on every URL, fall back to option 2 (run locally from a
+  residential IP) or option 3 (paste HTML in).
+- If `crawl.py` hits WAFs / Cloudflare / SPA shells, `--fetcher=auto` now
+  upgrades to headless Chromium automatically — no code change needed.
